@@ -9,6 +9,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
+	modelpkg "github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/service"
@@ -16,6 +17,19 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+func captureResponsesResponseText(c *gin.Context, response *dto.OpenAIResponsesResponse) {
+	if response == nil {
+		return
+	}
+	var builder strings.Builder
+	for _, output := range response.Output {
+		for _, content := range output.Content {
+			builder.WriteString(content.Text)
+		}
+	}
+	modelpkg.SetConversationResponseParts(c, builder.String(), "")
+}
 
 func OaiResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {
 	defer service.CloseResponseBodyGracefully(resp)
@@ -39,6 +53,7 @@ func OaiResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 		c.Set("image_generation_call_quality", responsesResponse.GetQuality())
 		c.Set("image_generation_call_size", responsesResponse.GetSize())
 	}
+	captureResponsesResponseText(c, &responsesResponse)
 
 	// 写入新的 response body
 	service.IOCopyBytesGracefully(c, resp, responseBody)
@@ -145,6 +160,7 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	}
 
 	usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
+	modelpkg.SetConversationResponseParts(c, responseTextBuilder.String(), "")
 
 	return usage, nil
 }

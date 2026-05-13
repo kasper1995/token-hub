@@ -63,6 +63,11 @@ const (
 	// It is not returned to end users, but can be persisted into consume/error logs for debugging.
 	ContextKeyAdminRejectReason ContextKey = "admin_reject_reason"
 
+	ContextKeyConversationResponseBody       ContextKey = "conversation_response_body"
+	ContextKeyConversationReasoningBody      ContextKey = "conversation_reasoning_body"
+	ContextKeyConversationResponseTruncated  ContextKey = "conversation_response_truncated"
+	ContextKeyConversationReasoningTruncated ContextKey = "conversation_reasoning_truncated"
+
 	// ContextKeyLanguage stores the user's language preference for i18n
 	ContextKeyLanguage ContextKey = "language"
 	ContextKeyIsStream ContextKey = "is_stream"

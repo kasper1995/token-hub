@@ -11,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
+	modelpkg "github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay/channel/openrouter"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
@@ -582,12 +583,29 @@ func ResponseClaude2OpenAI(claudeResponse *dto.ClaudeResponse) *dto.OpenAITextRe
 }
 
 type ClaudeResponseInfo struct {
-	ResponseId   string
-	Created      int64
-	Model        string
-	ResponseText strings.Builder
-	Usage        *dto.Usage
-	Done         bool
+	ResponseId    string
+	Created       int64
+	Model         string
+	ResponseText  strings.Builder
+	ReasoningText strings.Builder
+	Usage         *dto.Usage
+	Done          bool
+}
+
+func appendClaudeResponseText(claudeInfo *ClaudeResponseInfo, claudeResponse *dto.ClaudeResponse) {
+	if claudeInfo == nil || claudeResponse == nil {
+		return
+	}
+	for _, content := range claudeResponse.Content {
+		switch content.Type {
+		case "text":
+			claudeInfo.ResponseText.WriteString(content.GetText())
+		case "thinking":
+			if content.Thinking != nil {
+				claudeInfo.ReasoningText.WriteString(*content.Thinking)
+			}
+		}
+	}
 }
 
 func cacheCreationTokensForOpenAIUsage(usage *dto.Usage) int {
@@ -740,7 +758,7 @@ func FormatClaudeResponseInfo(claudeResponse *dto.ClaudeResponse, oaiResponse *d
 				claudeInfo.ResponseText.WriteString(*claudeResponse.Delta.Text)
 			}
 			if claudeResponse.Delta.Thinking != nil {
-				claudeInfo.ResponseText.WriteString(*claudeResponse.Delta.Thinking)
+				claudeInfo.ReasoningText.WriteString(*claudeResponse.Delta.Thinking)
 			}
 		}
 	} else if claudeResponse.Type == "message_delta" {
@@ -870,11 +888,12 @@ func HandleStreamFinalResponse(c *gin.Context, info *relaycommon.RelayInfo, clau
 
 func ClaudeStreamHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (*dto.Usage, *types.NewAPIError) {
 	claudeInfo := &ClaudeResponseInfo{
-		ResponseId:   helper.GetResponseID(c),
-		Created:      common.GetTimestamp(),
-		Model:        info.UpstreamModelName,
-		ResponseText: strings.Builder{},
-		Usage:        &dto.Usage{},
+		ResponseId:    helper.GetResponseID(c),
+		Created:       common.GetTimestamp(),
+		Model:         info.UpstreamModelName,
+		ResponseText:  strings.Builder{},
+		ReasoningText: strings.Builder{},
+		Usage:         &dto.Usage{},
 	}
 	var err *types.NewAPIError
 	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
@@ -888,6 +907,7 @@ func ClaudeStreamHandler(c *gin.Context, resp *http.Response, info *relaycommon.
 	}
 
 	HandleStreamFinalResponse(c, info, claudeInfo)
+	modelpkg.SetConversationResponseParts(c, claudeInfo.ResponseText.String(), claudeInfo.ReasoningText.String())
 	return claudeInfo.Usage, nil
 }
 
@@ -931,6 +951,8 @@ func HandleClaudeResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 		c.Set("claude_web_search_requests", claudeResponse.Usage.ServerToolUse.WebSearchRequests)
 	}
 
+	appendClaudeResponseText(claudeInfo, &claudeResponse)
+	modelpkg.SetConversationResponseParts(c, claudeInfo.ResponseText.String(), claudeInfo.ReasoningText.String())
 	service.IOCopyBytesGracefully(c, httpResp, responseData)
 	return nil
 }
@@ -939,11 +961,12 @@ func ClaudeHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayI
 	defer service.CloseResponseBodyGracefully(resp)
 
 	claudeInfo := &ClaudeResponseInfo{
-		ResponseId:   helper.GetResponseID(c),
-		Created:      common.GetTimestamp(),
-		Model:        info.UpstreamModelName,
-		ResponseText: strings.Builder{},
-		Usage:        &dto.Usage{},
+		ResponseId:    helper.GetResponseID(c),
+		Created:       common.GetTimestamp(),
+		Model:         info.UpstreamModelName,
+		ResponseText:  strings.Builder{},
+		ReasoningText: strings.Builder{},
+		Usage:         &dto.Usage{},
 	}
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {

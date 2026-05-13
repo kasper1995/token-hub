@@ -10,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
+	modelpkg "github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay/channel/openrouter"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
@@ -21,6 +22,19 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 )
+
+func captureOpenAITextResponse(c *gin.Context, response *dto.OpenAITextResponse) {
+	if response == nil {
+		return
+	}
+	var responseBuilder strings.Builder
+	var reasoningBuilder strings.Builder
+	for _, choice := range response.Choices {
+		responseBuilder.WriteString(choice.Message.StringContent())
+		reasoningBuilder.WriteString(choice.Message.GetReasoningContent())
+	}
+	modelpkg.SetConversationResponseParts(c, responseBuilder.String(), reasoningBuilder.String())
+}
 
 func sendStreamData(c *gin.Context, info *relaycommon.RelayInfo, data string, forceFormat bool, thinkToContent bool) error {
 	if data == "" {
@@ -117,6 +131,7 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 	var systemFingerprint string
 	var containStreamUsage bool
 	var responseTextBuilder strings.Builder
+	var responseReasoningBuilder strings.Builder
 	var toolCount int
 	var usage = &dto.Usage{}
 	var streamItems []string // store stream items
@@ -179,6 +194,15 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 	if err := processTokens(info.RelayMode, streamItems, &responseTextBuilder, &toolCount); err != nil {
 		logger.LogError(c, "error processing tokens: "+err.Error())
 	}
+	if responseTextBuilder.Len() == 0 && len(streamItems) > 0 {
+		if err := processChatCompletions("["+strings.Join(streamItems, ",")+"]", streamItems, &responseTextBuilder, &toolCount); err != nil {
+			logger.LogError(c, "error processing chat stream response for conversation log: "+err.Error())
+		}
+	}
+	if err := captureChatCompletionsStreamParts(streamItems, &responseTextBuilder, &responseReasoningBuilder); err != nil {
+		logger.LogError(c, "error processing chat stream response parts for conversation log: "+err.Error())
+	}
+	modelpkg.SetConversationResponseParts(c, responseTextBuilder.String(), responseReasoningBuilder.String())
 
 	if !containStreamUsage {
 		usage = service.ResponseText2Usage(c, responseTextBuilder.String(), info.UpstreamModelName, info.GetEstimatePromptTokens())
@@ -258,6 +282,7 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 	}
 
 	applyUsagePostProcessing(info, &simpleResponse.Usage, responseBody)
+	captureOpenAITextResponse(c, &simpleResponse)
 
 	switch info.RelayFormat {
 	case types.RelayFormatOpenAI:

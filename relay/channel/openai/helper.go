@@ -92,6 +92,35 @@ func ProcessStreamResponse(streamResponse dto.ChatCompletionsStreamResponse, res
 	return nil
 }
 
+func captureChatCompletionsStreamParts(streamItems []string, responseTextBuilder *strings.Builder, reasoningTextBuilder *strings.Builder) error {
+	if responseTextBuilder == nil || reasoningTextBuilder == nil {
+		return nil
+	}
+	var responseTemp strings.Builder
+	var reasoningTemp strings.Builder
+	for _, item := range streamItems {
+		var streamResponse dto.ChatCompletionsStreamResponse
+		if err := json.Unmarshal(common.StringToByteSlice(item), &streamResponse); err != nil {
+			return err
+		}
+		for _, choice := range streamResponse.Choices {
+			responseTemp.WriteString(choice.Delta.GetContentString())
+			reasoningTemp.WriteString(choice.Delta.GetReasoningContent())
+			if choice.Delta.ToolCalls != nil {
+				for _, tool := range choice.Delta.ToolCalls {
+					responseTemp.WriteString(tool.Function.Name)
+					responseTemp.WriteString(tool.Function.Arguments)
+				}
+			}
+		}
+	}
+	responseTextBuilder.Reset()
+	reasoningTextBuilder.Reset()
+	responseTextBuilder.WriteString(responseTemp.String())
+	reasoningTextBuilder.WriteString(reasoningTemp.String())
+	return nil
+}
+
 func processTokens(relayMode int, streamItems []string, responseTextBuilder *strings.Builder, toolCount *int) error {
 	streamResp := "[" + strings.Join(streamItems, ",") + "]"
 
