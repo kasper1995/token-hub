@@ -1,3 +1,7 @@
 {
-  "Each tier supports up to 2 conditions. The last tier without conditions is the fallback.": "Each tier supports up to 2 conditions. The last tier without conditions is the fallback."
+  "Each tier supports up to 2 conditions. The last tier without conditions is the fallback.": "Each tier supports up to 2 conditions. The last tier without conditions is the fallback.",
+  "No conversation records are available. Set CONVERSATION_LOG_ENABLED=true to start collecting successful conversations.": "No conversation records are available. Set CONVERSATION_LOG_ENABLED=true to start collecting successful conversations.",
+  "Only the latest 200 records are shown for this session.": "Only the latest 200 records are shown for this session.",
+  "Review collected conversation sessions and inspect raw request and response details.": "Review collected conversation sessions and inspect raw request and response details.",
+  "Search user or assistant text...": "Search user or assistant text..."
 }

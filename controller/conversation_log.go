@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"encoding/json"
 	"net/http"
 	"strconv"
 
@@ -33,7 +32,11 @@ func buildConversationLogQuery(c *gin.Context) model.ConversationLogQuery {
 		Exported:       exported,
 		RequestId:      c.Query("request_id"),
 		Username:       c.Query("username"),
+		TokenName:      c.Query("token_name"),
 		ModelName:      c.Query("model_name"),
+		Group:          c.Query("group"),
+		SessionId:      c.Query("session_id"),
+		Content:        c.Query("content"),
 	}
 }
 
@@ -49,6 +52,33 @@ func GetConversationLogs(c *gin.Context) {
 	common.ApiSuccess(c, pageInfo)
 }
 
+func GetConversationSessions(c *gin.Context) {
+	pageInfo := common.GetPageQuery(c)
+	sessions, total, err := model.GetConversationSessions(buildConversationLogQuery(c), pageInfo.GetStartIdx(), pageInfo.GetPageSize())
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	pageInfo.SetTotal(int(total))
+	pageInfo.SetItems(sessions)
+	common.ApiSuccess(c, pageInfo)
+}
+
+func GetConversationSessionDetail(c *gin.Context) {
+	sessionKey := c.Query("session_key")
+	if sessionKey == "" {
+		common.ApiErrorMsg(c, "session_key is required")
+		return
+	}
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "200"))
+	detail, err := model.GetConversationSessionDetail(buildConversationLogQuery(c), sessionKey, limit)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, detail)
+}
+
 func ExportConversationLogs(c *gin.Context) {
 	query := buildConversationLogQuery(c)
 	logs, err := model.ExportConversationLogs(query)
@@ -61,10 +91,15 @@ func ExportConversationLogs(c *gin.Context) {
 	c.Header("Content-Disposition", "attachment; filename=conversation_logs.jsonl")
 	c.Status(http.StatusOK)
 
-	encoder := json.NewEncoder(c.Writer)
 	ids := make([]int, 0, len(logs))
 	for _, log := range logs {
-		if err := encoder.Encode(log); err != nil {
+		line, err := common.Marshal(log)
+		if err != nil {
+			common.SysError("failed to encode conversation log: " + err.Error())
+			return
+		}
+		line = append(line, '\n')
+		if _, err := c.Writer.Write(line); err != nil {
 			return
 		}
 		ids = append(ids, log.Id)

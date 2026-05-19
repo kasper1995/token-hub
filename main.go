@@ -48,6 +48,10 @@ var classicBuildFS embed.FS
 var classicIndexPage []byte
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "clean-conversation-logs" {
+		os.Exit(runCleanConversationLogsCommand(os.Args[2:]))
+	}
+
 	startTime := time.Now()
 
 	err := InitResources()

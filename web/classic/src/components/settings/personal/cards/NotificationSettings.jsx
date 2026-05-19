@@ -90,6 +90,7 @@ const NotificationSettings = ({
       subscription: true,
       redemption: true,
       user: true,
+      conversation: true,
       setting: true,
     },
   });
@@ -174,6 +175,7 @@ const NotificationSettings = ({
         subscription: true,
         redemption: true,
         user: true,
+        conversation: true,
         setting: true,
       },
     };
@@ -310,6 +312,11 @@ const NotificationSettings = ({
           description: t('兑换码生成管理'),
         },
         { key: 'user', title: t('用户管理'), description: t('用户账户管理') },
+        {
+          key: 'conversation',
+          title: t('对话历史'),
+          description: t('对话记录与原始请求响应'),
+        },
         {
           key: 'setting',
           title: t('系统设置'),

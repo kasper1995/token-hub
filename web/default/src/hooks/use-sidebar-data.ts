@@ -32,6 +32,7 @@ import {
   MessageSquare,
   CreditCard,
   ListTodo,
+  History,
   Settings,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -134,6 +135,11 @@ export function useSidebarData(): SidebarData {
             title: t('Users'),
             url: '/users',
             icon: Users,
+          },
+          {
+            title: t('Conversation History'),
+            url: '/conversation-history',
+            icon: History,
           },
           {
             title: t('Redemption Codes'),

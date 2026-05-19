@@ -306,6 +306,8 @@ func SetApiRouter(router *gin.Engine) {
 		conversationLogRoute.Use(middleware.AdminAuth())
 		{
 			conversationLogRoute.GET("/", controller.GetConversationLogs)
+			conversationLogRoute.GET("/sessions", controller.GetConversationSessions)
+			conversationLogRoute.GET("/sessions/detail", controller.GetConversationSessionDetail)
 			conversationLogRoute.GET("/export", controller.ExportConversationLogs)
 		}
 
