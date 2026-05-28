@@ -24,8 +24,9 @@ import {
   useReactTable,
   type ColumnDef,
 } from '@tanstack/react-table'
-import { Eye, MessagesSquare } from 'lucide-react'
+import { Download, Eye, Loader2, MessagesSquare } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import {
   formatTimestampForInput,
   formatTimestampToDate,
@@ -38,7 +39,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { DataTableColumnHeader, DataTablePage } from '@/components/data-table'
-import { getConversationSessions } from '../api'
+import { exportConversationQAEJson, getConversationSessions } from '../api'
 import type {
   ConversationSessionSummary,
   GetConversationSessionDetailParams,
@@ -67,6 +68,7 @@ export function ConversationHistoryTable() {
   const [selectedSession, setSelectedSession] =
     useState<ConversationSessionSummary | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
+  const [isExportingQAE, setIsExportingQAE] = useState(false)
 
   const {
     globalFilter,
@@ -182,6 +184,31 @@ export function ConversationHistoryTable() {
 
   const sessions = data?.data.items || []
   const totalCount = data?.data.total || 0
+
+  const handleExportQAEJson = useCallback(async () => {
+    setIsExportingQAE(true)
+    try {
+      const blob = await exportConversationQAEJson({
+        ...detailFilters,
+        limit: 5000,
+      })
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = `tokenhub_qae_${Date.now()}.json`
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      URL.revokeObjectURL(url)
+      toast.success(t('QA JSON exported'))
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : t('Failed to export QA JSON')
+      )
+    } finally {
+      setIsExportingQAE(false)
+    }
+  }, [detailFilters, t])
 
   const columns = useMemo<ColumnDef<ConversationSessionSummary>[]>(
     () => [
@@ -368,6 +395,20 @@ export function ConversationHistoryTable() {
           searchPlaceholder: t('Search user or assistant text...'),
           hasAdditionalFilters,
           onReset: resetFilters,
+          preActions: (
+            <Button
+              variant='outline'
+              onClick={handleExportQAEJson}
+              disabled={isExportingQAE || totalCount === 0}
+            >
+              {isExportingQAE ? (
+                <Loader2 className='h-4 w-4 animate-spin' />
+              ) : (
+                <Download className='h-4 w-4' />
+              )}
+              {t('Export QA JSON')}
+            </Button>
+          ),
           additionalSearch: (
             <div className='grid w-full gap-2 sm:grid-cols-2 lg:grid-cols-6'>
               <Input

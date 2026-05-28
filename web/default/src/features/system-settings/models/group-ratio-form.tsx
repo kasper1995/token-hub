@@ -52,6 +52,7 @@ type GroupFormValues = {
   GroupRatio: string
   TopupGroupRatio: string
   UserUsableGroups: string
+  ConversationLogDisabledGroups: string
   GroupGroupRatio: string
   AutoGroups: string
   DefaultUseAutoGroup: boolean
@@ -118,6 +119,9 @@ export const GroupRatioForm = memo(function GroupRatioForm({
               groupRatio={form.watch('GroupRatio')}
               topupGroupRatio={form.watch('TopupGroupRatio')}
               userUsableGroups={form.watch('UserUsableGroups')}
+              conversationLogDisabledGroups={form.watch(
+                'ConversationLogDisabledGroups'
+              )}
               groupGroupRatio={form.watch('GroupGroupRatio')}
               autoGroups={form.watch('AutoGroups')}
               onChange={(field, value) =>
@@ -214,6 +218,27 @@ export const GroupRatioForm = memo(function GroupRatioForm({
                   <FormDescription>
                     {t(
                       'JSON map of group → description exposed when users create API keys.'
+                    )}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name='ConversationLogDisabledGroups'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>
+                    {t('Groups excluded from conversation logging')}
+                  </FormLabel>
+                  <FormControl>
+                    <Textarea rows={5} {...field} />
+                  </FormControl>
+                  <FormDescription>
+                    {t(
+                      'JSON array of group identifiers that should not be written to conversation history.'
                     )}
                   </FormDescription>
                   <FormMessage />

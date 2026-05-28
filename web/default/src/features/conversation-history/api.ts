@@ -40,3 +40,18 @@ export async function getConversationSessionDetail(
   const res = await api.get('/api/conversation_log/sessions/detail', { params })
   return res.data
 }
+
+export async function exportConversationQAEJson(
+  params: Omit<GetConversationSessionsParams, 'p' | 'page_size'>
+): Promise<Blob> {
+  const res = await api.get('/api/conversation_log/export', {
+    params: {
+      ...params,
+      format: 'qae-json',
+      source_prefix: 'tokenhub',
+      limit: params.limit ?? 5000,
+    },
+    responseType: 'blob',
+  })
+  return res.data
+}

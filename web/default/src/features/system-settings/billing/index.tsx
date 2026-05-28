@@ -53,6 +53,7 @@ const defaultBillingSettings: BillingSettings = {
   TopupGroupRatio: '',
   GroupRatio: '',
   UserUsableGroups: '',
+  ConversationLogDisabledGroups: '[]',
   GroupGroupRatio: '',
   AutoGroups: '',
   DefaultUseAutoGroup: false,

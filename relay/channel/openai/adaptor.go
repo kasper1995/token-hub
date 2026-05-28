@@ -94,6 +94,100 @@ func (a *Adaptor) Init(info *relaycommon.RelayInfo) {
 	}
 }
 
+func isOpenAICompletionsCompat(info *relaycommon.RelayInfo) bool {
+	return info != nil && info.ChannelType == constant.ChannelTypeOpenAICompletions
+}
+
+func messageTextForCompletions(message *dto.Message) string {
+	if message == nil {
+		return ""
+	}
+	contents := message.ParseContent()
+	if len(contents) == 0 {
+		return strings.TrimSpace(message.StringContent())
+	}
+	var builder strings.Builder
+	for _, content := range contents {
+		switch content.Type {
+		case dto.ContentTypeText:
+			builder.WriteString(content.Text)
+		case dto.ContentTypeImageURL:
+			builder.WriteString("[image]")
+		case dto.ContentTypeInputAudio:
+			builder.WriteString("[audio]")
+		case dto.ContentTypeFile:
+			builder.WriteString("[file]")
+		case dto.ContentTypeVideoUrl:
+			builder.WriteString("[video]")
+		}
+	}
+	return strings.TrimSpace(builder.String())
+}
+
+func messagesToCompletionsPrompt(messages []dto.Message) string {
+	var builder strings.Builder
+	for i := range messages {
+		message := &messages[i]
+		content := messageTextForCompletions(message)
+		if content == "" && len(message.ToolCalls) > 0 {
+			if toolCalls, err := common.Marshal(message.ParseToolCalls()); err == nil {
+				content = string(toolCalls)
+			}
+		}
+		if content == "" {
+			continue
+		}
+		role := strings.TrimSpace(message.Role)
+		if role == "" {
+			role = "user"
+		}
+		builder.WriteString(completionsRoleLabel(role))
+		builder.WriteString(": ")
+		builder.WriteString(content)
+		builder.WriteByte('\n')
+	}
+	prompt := strings.TrimSpace(builder.String())
+	if prompt == "" {
+		return ""
+	}
+	if !strings.HasSuffix(prompt, "Assistant:") {
+		prompt += "\nAssistant:"
+	}
+	return prompt
+}
+
+func completionsRoleLabel(role string) string {
+	switch strings.ToLower(role) {
+	case "system":
+		return "System"
+	case "assistant":
+		return "Assistant"
+	case "tool":
+		return "Tool"
+	default:
+		return "User"
+	}
+}
+
+func normalizeOpenAICompletionsRequest(request *dto.GeneralOpenAIRequest) {
+	if request == nil {
+		return
+	}
+	if request.MaxCompletionTokens != nil {
+		request.MaxTokens = request.MaxCompletionTokens
+	}
+	request.MaxCompletionTokens = nil
+	if request.Prompt == nil && len(request.Messages) > 0 {
+		request.Prompt = messagesToCompletionsPrompt(request.Messages)
+	}
+	request.Messages = nil
+	request.Tools = nil
+	request.ToolChoice = nil
+	request.FunctionCall = nil
+	request.StreamOptions = nil
+	request.ResponseFormat = nil
+}
+
 func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
 	if info.RelayMode == relayconstant.RelayModeRealtime {
 		if strings.HasPrefix(info.ChannelBaseUrl, "https://") {
@@ -105,6 +199,11 @@ func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
 			baseUrl = "ws://" + baseUrl
 			info.ChannelBaseUrl = baseUrl
 		}
+	}
+	if isOpenAICompletionsCompat(info) &&
+		info.RelayMode != relayconstant.RelayModeResponses &&
+		info.RelayMode != relayconstant.RelayModeResponsesCompact {
+		return fmt.Sprintf("%s/v1/completions", strings.TrimRight(info.ChannelBaseUrl, "/")), nil
 	}
 	switch info.ChannelType {
 	case constant.ChannelTypeAzure:
@@ -229,6 +328,10 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, header *http.Header, info *
 func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest) (any, error) {
 	if request == nil {
 		return nil, errors.New("request is nil")
+	}
+	if isOpenAICompletionsCompat(info) {
+		normalizeOpenAICompletionsRequest(request)
+		return request, nil
 	}
 	if info.ChannelType != constant.ChannelTypeOpenAI && info.ChannelType != constant.ChannelTypeAzure {
 		request.StreamOptions = nil

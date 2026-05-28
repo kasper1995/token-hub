@@ -15,34 +15,42 @@ type CleanConversationOptions struct {
 }
 
 type CleanConversationRecord struct {
-	SourceLogId      int    `json:"source_log_id"`
-	RequestId        string `json:"request_id,omitempty"`
-	UserId           int    `json:"user_id,omitempty"`
-	Username         string `json:"username,omitempty"`
-	TokenId          int    `json:"token_id,omitempty"`
-	TokenName        string `json:"token_name,omitempty"`
-	ChannelId        int    `json:"channel_id,omitempty"`
-	ChannelName      string `json:"channel_name,omitempty"`
-	ModelName        string `json:"model_name,omitempty"`
-	SessionId        string `json:"session_id,omitempty"`
-	User             string `json:"user"`
-	Assistant        string `json:"assistant"`
-	Reasoning        string `json:"reasoning,omitempty"`
-	PromptTokens     int    `json:"prompt_tokens,omitempty"`
-	CompletionTokens int    `json:"completion_tokens,omitempty"`
-	Status           string `json:"status,omitempty"`
-	RequestPath      string `json:"request_path,omitempty"`
-	CreatedAt        int64  `json:"created_at"`
+	SourceLogId      int                        `json:"source_log_id"`
+	RequestId        string                     `json:"request_id,omitempty"`
+	UserId           int                        `json:"user_id,omitempty"`
+	Username         string                     `json:"username,omitempty"`
+	TokenId          int                        `json:"token_id,omitempty"`
+	TokenName        string                     `json:"token_name,omitempty"`
+	ChannelId        int                        `json:"channel_id,omitempty"`
+	ChannelName      string                     `json:"channel_name,omitempty"`
+	ModelName        string                     `json:"model_name,omitempty"`
+	SessionId        string                     `json:"session_id,omitempty"`
+	User             string                     `json:"user"`
+	Assistant        string                     `json:"assistant"`
+	Reasoning        string                     `json:"reasoning,omitempty"`
+	Messages         []CleanConversationMessage `json:"messages,omitempty"`
+	ContextMessages  []CleanConversationMessage `json:"context_messages,omitempty"`
+	PromptTokens     int                        `json:"prompt_tokens,omitempty"`
+	CompletionTokens int                        `json:"completion_tokens,omitempty"`
+	Status           string                     `json:"status,omitempty"`
+	RequestPath      string                     `json:"request_path,omitempty"`
+	CreatedAt        int64                      `json:"created_at"`
 }
 
 type QAEImportRecord struct {
-	Id         string `json:"id"`
-	Question   string `json:"question"`
-	Answer     string `json:"answer"`
-	Context    string `json:"context,omitempty"`
-	Source     string `json:"source,omitempty"`
-	Model      string `json:"model,omitempty"`
-	Difficulty string `json:"difficulty,omitempty"`
+	Id         string         `json:"id"`
+	Question   string         `json:"question"`
+	Answer     string         `json:"answer"`
+	Context    string         `json:"context,omitempty"`
+	Source     string         `json:"source,omitempty"`
+	Model      string         `json:"model,omitempty"`
+	Difficulty string         `json:"difficulty,omitempty"`
+	Metadata   map[string]any `json:"metadata,omitempty"`
+}
+
+type CleanConversationMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
 }
 
 type CleanConversationSkip struct {
@@ -110,9 +118,15 @@ func BuildCleanConversationRecord(log *ConversationLog, options CleanConversatio
 	if err != nil {
 		return nil, "invalid_request_json"
 	}
-	userText := strings.TrimSpace(lastUserMessageText(request.Messages))
+	messages := normalizedConversationMessages(request.Messages)
+	userText, userMessageIndex := lastUserCleanMessageTextWithIndex(messages)
+	userText = strings.TrimSpace(userText)
 	if userText == "" {
 		userText = strings.TrimSpace(lastUserInputText(request.Input))
+		if len(messages) == 0 {
+			messages = normalizedInputMessages(request.Input)
+			_, userMessageIndex = lastUserCleanMessageTextWithIndex(messages)
+		}
 	}
 	if userText == "" {
 		return nil, "empty_user_message"
@@ -142,6 +156,8 @@ func BuildCleanConversationRecord(log *ConversationLog, options CleanConversatio
 		SessionId:        extractSessionID(request.Metadata),
 		User:             userText,
 		Assistant:        assistant,
+		Messages:         messages,
+		ContextMessages:  contextMessagesBeforeIndex(messages, userMessageIndex),
 		PromptTokens:     log.PromptTokens,
 		CompletionTokens: log.CompletionTokens,
 		Status:           log.Status,
@@ -187,14 +203,70 @@ func (record *CleanConversationRecord) ToQAEImportRecord(sourcePrefix string) QA
 	if record.CreatedAt != 0 {
 		contextParts = append(contextParts, "时间戳："+int64ToString(record.CreatedAt))
 	}
+	context := strings.Join(contextParts, "；")
+	if transcript := conversationTranscript(record.ContextMessages); transcript != "" {
+		context += "\n\n对话上下文：\n" + transcript
+	}
 
 	return QAEImportRecord{
 		Id:       sourcePrefix + ":" + intToString(record.SourceLogId),
 		Question: record.User,
 		Answer:   record.Assistant,
-		Context:  strings.Join(contextParts, "；"),
+		Context:  context,
 		Source:   source,
 		Model:    record.ModelName,
+		Metadata: record.qaeMetadata(),
+	}
+}
+
+func (record *CleanConversationRecord) qaeMetadata() map[string]any {
+	if record == nil {
+		return nil
+	}
+	metadata := map[string]any{
+		"source_log_id":      record.SourceLogId,
+		"created_at":         record.CreatedAt,
+		"prompt_tokens":      record.PromptTokens,
+		"completion_tokens":  record.CompletionTokens,
+		"context_turn_count": len(record.ContextMessages),
+	}
+	addStringMetadata(metadata, "request_id", record.RequestId)
+	addStringMetadata(metadata, "username", record.Username)
+	addStringMetadata(metadata, "token_name", record.TokenName)
+	addStringMetadata(metadata, "channel_name", record.ChannelName)
+	addStringMetadata(metadata, "model_name", record.ModelName)
+	addStringMetadata(metadata, "session_id", record.SessionId)
+	addStringMetadata(metadata, "status", record.Status)
+	addStringMetadata(metadata, "request_path", record.RequestPath)
+	if record.UserId != 0 {
+		metadata["user_id"] = record.UserId
+	}
+	if record.TokenId != 0 {
+		metadata["token_id"] = record.TokenId
+	}
+	if record.ChannelId != 0 {
+		metadata["channel_id"] = record.ChannelId
+	}
+	if record.Reasoning != "" {
+		metadata["reasoning"] = record.Reasoning
+	}
+	if len(record.Messages) > 0 {
+		messages := make([]CleanConversationMessage, 0, len(record.Messages)+1)
+		messages = append(messages, record.Messages...)
+		if record.Assistant != "" {
+			messages = append(messages, CleanConversationMessage{Role: "assistant", Content: record.Assistant})
+		}
+		metadata["messages"] = messages
+	}
+	if len(record.ContextMessages) > 0 {
+		metadata["context_messages"] = record.ContextMessages
+	}
+	return metadata
+}
+
+func addStringMetadata(metadata map[string]any, key string, value string) {
+	if value != "" {
+		metadata[key] = value
 	}
 }
 
@@ -218,12 +290,114 @@ func parseConversationCleanRequest(body string) (*conversationRequestForClean, e
 }
 
 func lastUserMessageText(messages []conversationMessageClean) string {
+	text, _ := lastUserMessageTextWithIndex(messages)
+	return text
+}
+
+func lastUserMessageTextWithIndex(messages []conversationMessageClean) (string, int) {
 	for i := len(messages) - 1; i >= 0; i-- {
 		if strings.EqualFold(messages[i].Role, "user") {
-			return textFromRawJSON(messages[i].Content)
+			return textFromRawJSON(messages[i].Content), i
 		}
 	}
-	return ""
+	return "", -1
+}
+
+func lastUserCleanMessageTextWithIndex(messages []CleanConversationMessage) (string, int) {
+	for i := len(messages) - 1; i >= 0; i-- {
+		if strings.EqualFold(messages[i].Role, "user") {
+			return messages[i].Content, i
+		}
+	}
+	return "", -1
+}
+
+func normalizedConversationMessages(messages []conversationMessageClean) []CleanConversationMessage {
+	cleanMessages := make([]CleanConversationMessage, 0, len(messages))
+	for _, message := range messages {
+		role := strings.TrimSpace(message.Role)
+		content := strings.TrimSpace(textFromRawJSON(message.Content))
+		if role == "" || content == "" {
+			continue
+		}
+		cleanMessages = append(cleanMessages, CleanConversationMessage{
+			Role:    strings.ToLower(role),
+			Content: content,
+		})
+	}
+	return cleanMessages
+}
+
+func normalizedInputMessages(raw json.RawMessage) []CleanConversationMessage {
+	if len(raw) == 0 {
+		return nil
+	}
+	var value any
+	if err := common.Unmarshal(raw, &value); err != nil {
+		return nil
+	}
+	return normalizedInputMessagesFromValue(value)
+}
+
+func normalizedInputMessagesFromValue(value any) []CleanConversationMessage {
+	switch typed := value.(type) {
+	case string:
+		text := strings.TrimSpace(typed)
+		if text == "" {
+			return nil
+		}
+		return []CleanConversationMessage{{Role: "user", Content: text}}
+	case []any:
+		messages := make([]CleanConversationMessage, 0, len(typed))
+		for _, item := range typed {
+			messages = append(messages, normalizedInputMessagesFromValue(item)...)
+		}
+		return messages
+	case map[string]any:
+		role := strings.TrimSpace(textFromValue(typed["role"]))
+		if role == "" {
+			role = "user"
+		}
+		for _, key := range []string{"content", "input", "text"} {
+			if raw, ok := typed[key]; ok {
+				if text := strings.TrimSpace(textFromValue(raw)); text != "" {
+					return []CleanConversationMessage{{
+						Role:    strings.ToLower(role),
+						Content: text,
+					}}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func contextMessagesBeforeIndex(messages []CleanConversationMessage, index int) []CleanConversationMessage {
+	if index <= 0 || len(messages) == 0 {
+		return nil
+	}
+	context := make([]CleanConversationMessage, 0, index)
+	for _, message := range messages[:index] {
+		if strings.EqualFold(message.Role, "system") ||
+			strings.EqualFold(message.Role, "user") ||
+			strings.EqualFold(message.Role, "assistant") {
+			context = append(context, message)
+		}
+	}
+	return context
+}
+
+func conversationTranscript(messages []CleanConversationMessage) string {
+	parts := make([]string, 0, len(messages))
+	for _, message := range messages {
+		role := strings.TrimSpace(message.Role)
+		content := strings.TrimSpace(message.Content)
+		if role == "" || content == "" {
+			continue
+		}
+		parts = append(parts, role+": "+content)
+	}
+	return strings.Join(parts, "\n")
 }
 
 func lastUserInputText(raw json.RawMessage) string {

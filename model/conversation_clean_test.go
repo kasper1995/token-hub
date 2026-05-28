@@ -154,6 +154,56 @@ func TestCleanConversationRecordToQAEImportRecord(t *testing.T) {
 	}
 }
 
+func TestCleanConversationRecordToQAEImportRecordIncludesMultiturnContext(t *testing.T) {
+	log := &ConversationLog{
+		Id:           21,
+		RequestId:    "req-multi",
+		ModelName:    "gpt-4o",
+		RequestBody:  `{"messages":[{"role":"system","content":"回答要简洁"},{"role":"user","content":"第一轮问题"},{"role":"assistant","content":"第一轮回答"},{"role":"user","content":"基于上面继续分析"}],"metadata":{"conversation_id":"conv-qa"}}`,
+		ResponseBody: "第二轮回答",
+		Status:       ConversationLogStatusOK,
+		CreatedAt:    1778638000,
+	}
+
+	record, reason := BuildCleanConversationRecord(log, CleanConversationOptions{SkipInternalCalls: true})
+	if reason != "" {
+		t.Fatalf("expected clean record, got skip reason %q", reason)
+	}
+	qae := record.ToQAEImportRecord("tokenhub")
+
+	if qae.Question != "基于上面继续分析" {
+		t.Fatalf("unexpected question %q", qae.Question)
+	}
+	if qae.Answer != "第二轮回答" {
+		t.Fatalf("unexpected answer %q", qae.Answer)
+	}
+	for _, want := range []string{
+		"会话ID：conv-qa",
+		"对话上下文：",
+		"system: 回答要简洁",
+		"user: 第一轮问题",
+		"assistant: 第一轮回答",
+	} {
+		if !strings.Contains(qae.Context, want) {
+			t.Fatalf("expected qae context to contain %q, got %q", want, qae.Context)
+		}
+	}
+	if strings.Contains(qae.Context, "基于上面继续分析") {
+		t.Fatalf("current question should not be duplicated in context: %q", qae.Context)
+	}
+
+	messages, ok := qae.Metadata["messages"].([]CleanConversationMessage)
+	if !ok {
+		t.Fatalf("expected metadata messages, got %#v", qae.Metadata["messages"])
+	}
+	if len(messages) != 5 {
+		t.Fatalf("expected request messages plus current assistant, got %#v", messages)
+	}
+	if messages[4].Role != "assistant" || messages[4].Content != "第二轮回答" {
+		t.Fatalf("expected current assistant appended to metadata messages, got %#v", messages[4])
+	}
+}
+
 func TestBuildConversationLogSearchFieldsExtractsSessionAndText(t *testing.T) {
 	fields := buildConversationLogSearchFields(
 		`{"messages":[{"role":"user","content":"old question"},{"role":"assistant","content":"old answer"},{"role":"user","content":[{"type":"text","text":"分析这张图"},{"type":"image_url","image_url":{"url":"data:image/png;base64,abc"}},{"type":"file","file":{"filename":"report.pdf"}},{"type":"tool_result","content":"tool output"}]}],"metadata":{"conversationId":"conv-1"}}`,

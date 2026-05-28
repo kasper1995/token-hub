@@ -7,10 +7,11 @@ import (
 	"testing"
 
 	common2 "github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/types"
-
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
+	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/setting/model_setting"
+	"github.com/QuantumNous/new-api/types"
 	"github.com/samber/lo"
 )
 
@@ -1534,6 +1535,57 @@ func TestApplyParamOverrideSyncFieldsNoChangeWhenBothExist(t *testing.T) {
 		if _, exists := headers["session_id"]; exists {
 			t.Fatalf("expected no override when both sides already have value")
 		}
+	}
+}
+
+func TestOpenAICompletionsParamOverrideUsesEffectiveCompletionsPath(t *testing.T) {
+	info := &RelayInfo{
+		ChannelMeta: &ChannelMeta{
+			ChannelType: constant.ChannelTypeOpenAICompletions,
+			ParamOverride: map[string]interface{}{
+				"operations": []interface{}{
+					map[string]interface{}{
+						"mode": "sync_fields",
+						"from": "json:max_completion_tokens",
+						"to":   "json:max_tokens",
+						"conditions": []interface{}{
+							map[string]interface{}{
+								"path":  "request_path",
+								"mode":  "full",
+								"value": "/v1/completions",
+							},
+						},
+					},
+					map[string]interface{}{
+						"mode": "delete",
+						"path": "max_completion_tokens",
+						"conditions": []interface{}{
+							map[string]interface{}{
+								"path":  "request_path",
+								"mode":  "full",
+								"value": "/v1/completions",
+							},
+						},
+					},
+				},
+			},
+		},
+		RelayMode:      relayconstant.RelayModeChatCompletions,
+		RequestURLPath: "/v1/chat/completions",
+	}
+
+	out, err := ApplyParamOverrideWithRelayInfo([]byte(`{"model":"glm-5","max_completion_tokens":200}`), info)
+	if err != nil {
+		t.Fatalf("ApplyParamOverrideWithRelayInfo returned error: %v", err)
+	}
+	assertJSONEqual(t, `{"model":"glm-5","max_tokens":200}`, string(out))
+
+	ctx := BuildParamOverrideContext(info)
+	if got := ctx["request_path"]; got != "/v1/completions" {
+		t.Fatalf("request_path = %v, want /v1/completions", got)
+	}
+	if got := ctx["original_request_path"]; got != "/v1/chat/completions" {
+		t.Fatalf("original_request_path = %v, want /v1/chat/completions", got)
 	}
 }
 

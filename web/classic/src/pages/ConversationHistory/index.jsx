@@ -32,8 +32,8 @@ import {
   Typography,
 } from '@douyinfe/semi-ui';
 import { IconSearch } from '@douyinfe/semi-icons';
-import { Eye, MessagesSquare } from 'lucide-react';
-import { API, showError, timestamp2string } from '../../helpers';
+import { Download, Eye, MessagesSquare } from 'lucide-react';
+import { API, showError, showSuccess, timestamp2string } from '../../helpers';
 import { ITEMS_PER_PAGE } from '../../constants';
 
 const { Text, Title } = Typography;
@@ -252,6 +252,7 @@ export default function ConversationHistory() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedSession, setSelectedSession] = useState(null);
   const [activeFilters, setActiveFilters] = useState({});
+  const [exportingQAE, setExportingQAE] = useState(false);
 
   const loadSessions = useCallback(
     async (page = activePage, size = pageSize) => {
@@ -391,6 +392,35 @@ export default function ConversationHistory() {
     setTimeout(() => loadSessions(1, pageSize), 100);
   };
 
+  const exportQAEJson = async () => {
+    setExportingQAE(true);
+    try {
+      const filters = getFilters(formApi);
+      const res = await API.get('/api/conversation_log/export', {
+        params: {
+          ...filters,
+          format: 'qae-json',
+          source_prefix: 'tokenhub',
+          limit: 5000,
+        },
+        responseType: 'blob',
+      });
+      const url = URL.createObjectURL(res.data);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `tokenhub_qae_${Date.now()}.json`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+      showSuccess(t('QA JSON 导出成功'));
+    } catch (error) {
+      showError(error);
+    } finally {
+      setExportingQAE(false);
+    }
+  };
+
   return (
     <div className='mt-[60px] px-2'>
       <Card className='!rounded-2xl shadow-sm border-0'>
@@ -401,9 +431,19 @@ export default function ConversationHistory() {
               {t('按会话查看已采集的用户消息、助手回复和原始请求响应')}
             </Text>
           </div>
-          <Button onClick={() => loadSessions(1, pageSize)} loading={loading}>
-            {t('刷新')}
-          </Button>
+          <Space>
+            <Button
+              icon={<Download size={15} />}
+              onClick={exportQAEJson}
+              loading={exportingQAE}
+              disabled={total === 0}
+            >
+              {t('导出 QA JSON')}
+            </Button>
+            <Button onClick={() => loadSessions(1, pageSize)} loading={loading}>
+              {t('刷新')}
+            </Button>
+          </Space>
         </div>
 
         <Form

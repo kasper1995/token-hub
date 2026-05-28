@@ -57,6 +57,7 @@ type GroupRatioVisualEditorProps = {
   groupRatio: string
   topupGroupRatio: string
   userUsableGroups: string
+  conversationLogDisabledGroups: string
   groupGroupRatio: string
   autoGroups: string
   onChange: (field: string, value: string) => void
@@ -73,6 +74,7 @@ type GroupPricingRow = {
   ratio: number
   selectable: boolean
   description: string
+  recordConversations: boolean
 }
 
 type GroupOverride = {
@@ -97,7 +99,8 @@ function normalizeRatio(value: unknown): number {
 
 function buildGroupPricingRows(
   groupRatio: string,
-  userUsableGroups: string
+  userUsableGroups: string,
+  conversationLogDisabledGroups: string
 ): GroupPricingRow[] {
   const ratioMap = safeJsonParse<Record<string, number>>(groupRatio, {
     fallback: {},
@@ -107,7 +110,17 @@ function buildGroupPricingRows(
     fallback: {},
     context: 'user usable groups',
   })
-  const names = new Set([...Object.keys(ratioMap), ...Object.keys(usableMap)])
+  const disabledGroups = new Set(
+    safeJsonParse<string[]>(conversationLogDisabledGroups, {
+      fallback: [],
+      context: 'conversation log disabled groups',
+    }).filter((name) => typeof name === 'string')
+  )
+  const names = new Set([
+    ...Object.keys(ratioMap),
+    ...Object.keys(usableMap),
+    ...disabledGroups,
+  ])
 
   return Array.from(names).map((name) => ({
     _id: createGroupPricingId(),
@@ -115,12 +128,14 @@ function buildGroupPricingRows(
     ratio: normalizeRatio(ratioMap[name]),
     selectable: Object.prototype.hasOwnProperty.call(usableMap, name),
     description: String(usableMap[name] ?? ''),
+    recordConversations: !disabledGroups.has(name),
   }))
 }
 
 function serializeGroupPricingRows(rows: GroupPricingRow[]) {
   const groupRatio: Record<string, number> = {}
   const userUsableGroups: Record<string, string> = {}
+  const conversationLogDisabledGroups: string[] = []
 
   for (const row of rows) {
     const name = row.name.trim()
@@ -129,11 +144,19 @@ function serializeGroupPricingRows(rows: GroupPricingRow[]) {
     if (row.selectable) {
       userUsableGroups[name] = row.description
     }
+    if (!row.recordConversations) {
+      conversationLogDisabledGroups.push(name)
+    }
   }
 
   return {
     GroupRatio: JSON.stringify(groupRatio, null, 2),
     UserUsableGroups: JSON.stringify(userUsableGroups, null, 2),
+    ConversationLogDisabledGroups: JSON.stringify(
+      conversationLogDisabledGroups,
+      null,
+      2
+    ),
   }
 }
 
@@ -148,12 +171,20 @@ function groupPricingSignature(rows: GroupPricingRow[]): string {
       fallback: {},
       silent: true,
     }),
+    conversationLogDisabledGroups: safeJsonParse(
+      serialized.ConversationLogDisabledGroups,
+      {
+        fallback: [],
+        silent: true,
+      }
+    ),
   })
 }
 
 function sourceGroupPricingSignature(
   groupRatio: string,
-  userUsableGroups: string
+  userUsableGroups: string,
+  conversationLogDisabledGroups: string
 ): string {
   return JSON.stringify({
     groupRatio: safeJsonParse(groupRatio, { fallback: {}, silent: true }),
@@ -161,6 +192,13 @@ function sourceGroupPricingSignature(
       fallback: {},
       silent: true,
     }),
+    conversationLogDisabledGroups: safeJsonParse(
+      conversationLogDisabledGroups,
+      {
+        fallback: [],
+        silent: true,
+      }
+    ),
   })
 }
 
@@ -168,6 +206,7 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
   groupRatio,
   topupGroupRatio,
   userUsableGroups,
+  conversationLogDisabledGroups,
   groupGroupRatio,
   autoGroups,
   onChange,
@@ -413,6 +452,7 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
       <GroupPricingTable
         groupRatio={groupRatio}
         userUsableGroups={userUsableGroups}
+        conversationLogDisabledGroups={conversationLogDisabledGroups}
         onChange={onChange}
       />
 
@@ -753,31 +793,42 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
 type GroupPricingTableProps = {
   groupRatio: string
   userUsableGroups: string
+  conversationLogDisabledGroups: string
   onChange: (field: string, value: string) => void
 }
 
 function GroupPricingTable({
   groupRatio,
   userUsableGroups,
+  conversationLogDisabledGroups,
   onChange,
 }: GroupPricingTableProps) {
   const { t } = useTranslation()
   const [rows, setRows] = useState<GroupPricingRow[]>(() =>
-    buildGroupPricingRows(groupRatio, userUsableGroups)
+    buildGroupPricingRows(
+      groupRatio,
+      userUsableGroups,
+      conversationLogDisabledGroups
+    )
   )
 
   useEffect(() => {
     const incomingSignature = sourceGroupPricingSignature(
       groupRatio,
-      userUsableGroups
+      userUsableGroups,
+      conversationLogDisabledGroups
     )
     setRows((currentRows) => {
       if (groupPricingSignature(currentRows) === incomingSignature) {
         return currentRows
       }
-      return buildGroupPricingRows(groupRatio, userUsableGroups)
+      return buildGroupPricingRows(
+        groupRatio,
+        userUsableGroups,
+        conversationLogDisabledGroups
+      )
     })
-  }, [groupRatio, userUsableGroups])
+  }, [groupRatio, userUsableGroups, conversationLogDisabledGroups])
 
   const emitRows = useCallback(
     (nextRows: GroupPricingRow[]) => {
@@ -785,6 +836,10 @@ function GroupPricingTable({
       const serialized = serializeGroupPricingRows(nextRows)
       onChange('GroupRatio', serialized.GroupRatio)
       onChange('UserUsableGroups', serialized.UserUsableGroups)
+      onChange(
+        'ConversationLogDisabledGroups',
+        serialized.ConversationLogDisabledGroups
+      )
     },
     [onChange]
   )
@@ -818,6 +873,7 @@ function GroupPricingTable({
         ratio: 1,
         selectable: true,
         description: '',
+        recordConversations: true,
       },
     ])
   }, [emitRows, rows])
@@ -870,6 +926,9 @@ function GroupPricingTable({
                   <TableHead className='w-28 text-center'>
                     {t('User selectable')}
                   </TableHead>
+                  <TableHead className='w-32 text-center'>
+                    {t('Record conversations')}
+                  </TableHead>
                   <TableHead className='min-w-56'>{t('Description')}</TableHead>
                   <TableHead className='w-16 text-right'>
                     {t('Actions')}
@@ -880,7 +939,7 @@ function GroupPricingTable({
                 {rows.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={5}
+                      colSpan={6}
                       className='text-muted-foreground h-20 text-center text-sm'
                     >
                       {t('No groups yet. Add a group to get started.')}
@@ -923,6 +982,21 @@ function GroupPricingTable({
                               updateRow(row._id, 'selectable', checked === true)
                             }
                             aria-label={t('User selectable')}
+                          />
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className='flex justify-center'>
+                          <Checkbox
+                            checked={row.recordConversations}
+                            onCheckedChange={(checked) =>
+                              updateRow(
+                                row._id,
+                                'recordConversations',
+                                checked === true
+                              )
+                            }
+                            aria-label={t('Record conversations')}
                           />
                         </div>
                       </TableCell>

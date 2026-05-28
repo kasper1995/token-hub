@@ -3794,6 +3794,10 @@
     "见上方动态计费详情": "See dynamic pricing details above",
     "含时间条件": "Time rules",
     "含请求条件": "Request rules",
-    "（当前仅支持易支付接口，默认使用上方服务器地址作为回调地址！）": "(Currently only supports Epay interface, the default callback address is the server address above!)"
+    "（当前仅支持易支付接口，默认使用上方服务器地址作为回调地址！）": "(Currently only supports Epay interface, the default callback address is the server address above!)",
+    "记录对话": "Record conversations",
+    "不记录对话的分组": "Groups excluded from conversation logging",
+    "为一个 JSON 字符串数组，例如：[\"vip\"]": "A JSON string array, for example: [\"vip\"]",
+    "列在这里的分组不会写入对话历史，也不会出现在 QA JSON 导出中。": "Groups listed here are not written to conversation history and will not appear in QA JSON exports."
   }
 }

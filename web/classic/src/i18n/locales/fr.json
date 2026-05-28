@@ -3649,6 +3649,10 @@
     "默认用户消息": "Bonjour",
     "默认补全倍率": "Taux de complétion par défaut",
     "阶梯计费（表达式解析失败）": "Facturation par paliers (échec de l'analyse de l'expression)",
-    "阶梯计费（未匹配到对应阶梯）": "Facturation par paliers (aucun palier correspondant)"
+    "阶梯计费（未匹配到对应阶梯）": "Facturation par paliers (aucun palier correspondant)",
+    "记录对话": "Enregistrer les conversations",
+    "不记录对话的分组": "Groupes exclus de l'historique des conversations",
+    "为一个 JSON 字符串数组，例如：[\"vip\"]": "Un tableau de chaines JSON, par exemple : [\"vip\"]",
+    "列在这里的分组不会写入对话历史，也不会出现在 QA JSON 导出中。": "Les groupes listes ici ne sont pas ecrits dans l'historique des conversations et n'apparaitront pas dans les exports JSON QA."
   }
 }

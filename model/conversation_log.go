@@ -11,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/setting"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -434,6 +435,9 @@ func SetConversationResponseParts(c *gin.Context, responseBody string, reasoning
 
 func RecordConversationLog(c *gin.Context, relayInfo *relaycommon.RelayInfo, params RecordConversationLogParams) {
 	if !common.ConversationLogEnabled || c == nil || relayInfo == nil {
+		return
+	}
+	if setting.IsConversationLogDisabledGroup(relayInfo.UsingGroup) {
 		return
 	}
 	requestBody, requestTruncated, err := requestBodyFromContext(c)

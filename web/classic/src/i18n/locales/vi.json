@@ -4183,6 +4183,10 @@
     "默认用户消息": "Xin chào",
     "默认补全倍率": "Tỷ lệ hoàn thành mặc định",
     "阶梯计费（表达式解析失败）": "Thanh toán theo bậc (không phân tích được biểu thức)",
-    "阶梯计费（未匹配到对应阶梯）": "Thanh toán theo bậc (không tìm thấy bậc phù hợp)"
+    "阶梯计费（未匹配到对应阶梯）": "Thanh toán theo bậc (không tìm thấy bậc phù hợp)",
+    "记录对话": "Ghi lại cuộc trò chuyện",
+    "不记录对话的分组": "Nhóm bị loại khỏi nhật ký trò chuyện",
+    "为一个 JSON 字符串数组，例如：[\"vip\"]": "Một mảng chuỗi JSON, ví dụ: [\"vip\"]",
+    "列在这里的分组不会写入对话历史，也不会出现在 QA JSON 导出中。": "Các nhóm được liệt kê ở đây sẽ không được ghi vào lịch sử trò chuyện và không xuất hiện trong bản xuất QA JSON."
   }
 }

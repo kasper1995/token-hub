@@ -43,6 +43,7 @@ const getGroupDefaults = (settings: BillingSettings) => ({
   TopupGroupRatio: settings.TopupGroupRatio,
   GroupRatio: settings.GroupRatio,
   UserUsableGroups: settings.UserUsableGroups,
+  ConversationLogDisabledGroups: settings.ConversationLogDisabledGroups,
   GroupGroupRatio: settings.GroupGroupRatio,
   AutoGroups: settings.AutoGroups,
   DefaultUseAutoGroup: settings.DefaultUseAutoGroup,

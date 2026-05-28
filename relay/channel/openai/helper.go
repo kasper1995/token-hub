@@ -18,6 +18,106 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type completionsCompatStreamResponse struct {
+	Id                string  `json:"id"`
+	Object            string  `json:"object"`
+	Created           int64   `json:"created"`
+	Model             string  `json:"model"`
+	SystemFingerprint *string `json:"system_fingerprint"`
+	Choices           []struct {
+		Text         string  `json:"text"`
+		FinishReason *string `json:"finish_reason"`
+		Index        int     `json:"index"`
+	} `json:"choices"`
+	Usage *dto.Usage `json:"usage"`
+}
+
+type completionsCompatResponse struct {
+	Id      string `json:"id"`
+	Model   string `json:"model"`
+	Object  string `json:"object"`
+	Created any    `json:"created"`
+	Choices []struct {
+		Index        int    `json:"index"`
+		Text         string `json:"text"`
+		FinishReason string `json:"finish_reason"`
+	} `json:"choices"`
+	Error any `json:"error,omitempty"`
+	dto.Usage
+}
+
+func shouldNormalizeCompletionsCompatResponse(info *relaycommon.RelayInfo) bool {
+	return isOpenAICompletionsCompat(info) && info.RelayMode != relayconstant.RelayModeCompletions
+}
+
+func normalizeCompletionsStreamDataForChat(info *relaycommon.RelayInfo, data string) (string, bool) {
+	if !shouldNormalizeCompletionsCompatResponse(info) || strings.TrimSpace(data) == "" {
+		return data, false
+	}
+	var completion completionsCompatStreamResponse
+	if err := common.UnmarshalJsonStr(data, &completion); err != nil {
+		return data, false
+	}
+	chat := dto.ChatCompletionsStreamResponse{
+		Id:                completion.Id,
+		Object:            completion.Object,
+		Created:           completion.Created,
+		Model:             completion.Model,
+		SystemFingerprint: completion.SystemFingerprint,
+		Usage:             completion.Usage,
+		Choices:           make([]dto.ChatCompletionsStreamResponseChoice, 0, len(completion.Choices)),
+	}
+	for _, choice := range completion.Choices {
+		delta := dto.ChatCompletionsStreamResponseChoiceDelta{}
+		if choice.Text != "" {
+			delta.SetContentString(choice.Text)
+		}
+		chat.Choices = append(chat.Choices, dto.ChatCompletionsStreamResponseChoice{
+			Delta:        delta,
+			FinishReason: choice.FinishReason,
+			Index:        choice.Index,
+		})
+	}
+	normalized, err := common.Marshal(chat)
+	if err != nil {
+		return data, false
+	}
+	return string(normalized), true
+}
+
+func normalizeCompletionsResponseBodyForChat(info *relaycommon.RelayInfo, responseBody []byte) ([]byte, bool) {
+	if !shouldNormalizeCompletionsCompatResponse(info) || len(responseBody) == 0 {
+		return responseBody, false
+	}
+	var completion completionsCompatResponse
+	if err := common.Unmarshal(responseBody, &completion); err != nil {
+		return responseBody, false
+	}
+	chat := dto.OpenAITextResponse{
+		Id:      completion.Id,
+		Model:   completion.Model,
+		Object:  completion.Object,
+		Created: completion.Created,
+		Error:   completion.Error,
+		Usage:   completion.Usage,
+		Choices: make([]dto.OpenAITextResponseChoice, 0, len(completion.Choices)),
+	}
+	for _, choice := range completion.Choices {
+		message := dto.Message{Role: "assistant"}
+		message.SetStringContent(choice.Text)
+		chat.Choices = append(chat.Choices, dto.OpenAITextResponseChoice{
+			Index:        choice.Index,
+			Message:      message,
+			FinishReason: choice.FinishReason,
+		})
+	}
+	normalized, err := common.Marshal(chat)
+	if err != nil {
+		return responseBody, false
+	}
+	return normalized, true
+}
+
 // 辅助函数
 func HandleStreamFormat(c *gin.Context, info *relaycommon.RelayInfo, data string, forceFormat bool, thinkToContent bool) error {
 	info.SendResponseCount++

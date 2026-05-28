@@ -3,6 +3,12 @@ package model
 import (
 	"fmt"
 	"testing"
+
+	"github.com/QuantumNous/new-api/common"
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/setting"
+
+	"github.com/gin-gonic/gin"
 )
 
 func resetConversationLogsForSessionTest(t *testing.T) {
@@ -171,5 +177,34 @@ func TestGetConversationSessionDetailHydratesMissingDisplayFieldsFromBodies(t *t
 	}
 	if detail.Logs[0].AssistantText != "详情回复" {
 		t.Fatalf("expected hydrated assistant text, got %#v", detail.Logs[0])
+	}
+}
+
+func TestRecordConversationLogSkipsDisabledGroup(t *testing.T) {
+	resetConversationLogsForSessionTest(t)
+
+	originalEnabled := common.ConversationLogEnabled
+	originalDisabledGroups := setting.ConversationLogDisabledGroups2JSONString()
+	common.ConversationLogEnabled = true
+	if err := setting.UpdateConversationLogDisabledGroupsByJSONString(`["vip"]`); err != nil {
+		t.Fatalf("failed to configure disabled groups: %v", err)
+	}
+	t.Cleanup(func() {
+		common.ConversationLogEnabled = originalEnabled
+		if err := setting.UpdateConversationLogDisabledGroupsByJSONString(originalDisabledGroups); err != nil {
+			t.Fatalf("failed to restore disabled groups: %v", err)
+		}
+	})
+
+	RecordConversationLog(&gin.Context{}, &relaycommon.RelayInfo{UsingGroup: "vip"}, RecordConversationLogParams{
+		Status: ConversationLogStatusOK,
+	})
+
+	var count int64
+	if err := LOG_DB.Model(&ConversationLog{}).Count(&count).Error; err != nil {
+		t.Fatalf("failed to count conversation logs: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("expected disabled group to skip conversation log, got %d records", count)
 	}
 }

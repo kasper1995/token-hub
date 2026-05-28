@@ -62,6 +62,17 @@ export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
       keyMinLength: 20,
     },
   },
+  58: {
+    id: 58,
+    name: CHANNEL_TYPES[58],
+    icon: 'openai',
+    defaultBaseUrl: 'https://api.openai.com',
+    hints: {
+      baseUrl: 'Base URL without /v1/completions',
+      key: 'Format: sk-...',
+      models: 'Legacy completion models',
+    },
+  },
   3: {
     id: 3,
     name: CHANNEL_TYPES[3],

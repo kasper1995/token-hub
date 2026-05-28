@@ -25,13 +25,23 @@ function parseJSON(str, fallback) {
   }
 }
 
-function buildRows(groupRatioStr, userUsableGroupsStr) {
+function buildRows(
+  groupRatioStr,
+  userUsableGroupsStr,
+  conversationLogDisabledGroupsStr,
+) {
   const ratioMap = parseJSON(groupRatioStr, {});
   const usableMap = parseJSON(userUsableGroupsStr, {});
+  const disabledGroups = new Set(
+    parseJSON(conversationLogDisabledGroupsStr, []).filter(
+      (name) => typeof name === 'string',
+    ),
+  );
 
   const allNames = new Set([
     ...Object.keys(ratioMap),
     ...Object.keys(usableMap),
+    ...disabledGroups,
   ]);
 
   return Array.from(allNames).map((name) => ({
@@ -40,12 +50,14 @@ function buildRows(groupRatioStr, userUsableGroupsStr) {
     ratio: ratioMap[name] ?? 1,
     selectable: name in usableMap,
     description: usableMap[name] ?? '',
+    recordConversations: !disabledGroups.has(name),
   }));
 }
 
 export function serializeGroupTable(rows) {
   const groupRatio = {};
   const userUsableGroups = {};
+  const conversationLogDisabledGroups = [];
 
   rows.forEach((row) => {
     if (!row.name) return;
@@ -53,19 +65,32 @@ export function serializeGroupTable(rows) {
     if (row.selectable) {
       userUsableGroups[row.name] = row.description;
     }
+    if (!row.recordConversations) {
+      conversationLogDisabledGroups.push(row.name);
+    }
   });
 
   return {
     GroupRatio: JSON.stringify(groupRatio, null, 2),
     UserUsableGroups: JSON.stringify(userUsableGroups, null, 2),
+    ConversationLogDisabledGroups: JSON.stringify(
+      conversationLogDisabledGroups,
+      null,
+      2,
+    ),
   };
 }
 
-export default function GroupTable({ groupRatio, userUsableGroups, onChange }) {
+export default function GroupTable({
+  groupRatio,
+  userUsableGroups,
+  conversationLogDisabledGroups,
+  onChange,
+}) {
   const { t } = useTranslation();
 
   const [rows, setRows] = useState(() =>
-    buildRows(groupRatio, userUsableGroups),
+    buildRows(groupRatio, userUsableGroups, conversationLogDisabledGroups),
   );
 
   // Use functional setRows to keep updateRow/addRow/removeRow referentially
@@ -108,6 +133,7 @@ export default function GroupTable({ groupRatio, userUsableGroups, onChange }) {
           ratio: 1,
           selectable: true,
           description: '',
+          recordConversations: true,
         },
       ];
     });
@@ -180,6 +206,21 @@ export default function GroupTable({ groupRatio, userUsableGroups, onChange }) {
             checked={record.selectable}
             onChange={(e) =>
               updateRow(record._id, 'selectable', e.target.checked)
+            }
+          />
+        ),
+      },
+      {
+        title: t('记录对话'),
+        dataIndex: 'recordConversations',
+        key: 'recordConversations',
+        width: 90,
+        align: 'center',
+        render: (_, record) => (
+          <Checkbox
+            checked={record.recordConversations}
+            onChange={(e) =>
+              updateRow(record._id, 'recordConversations', e.target.checked)
             }
           />
         ),

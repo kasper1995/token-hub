@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
+	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/samber/lo"
 	"github.com/tidwall/gjson"
@@ -2016,10 +2018,11 @@ func BuildParamOverrideContext(info *RelayInfo) map[string]interface{} {
 	}
 
 	if info.RequestURLPath != "" {
-		requestPath := info.RequestURLPath
+		requestPath := paramOverrideRequestPath(info)
 		if requestPath != "" {
 			ctx["request_path"] = requestPath
 		}
+		ctx["original_request_path"] = info.RequestURLPath
 	}
 
 	ctx[paramOverrideContextRequestHeaders] = buildRequestHeadersContext(info.RequestHeaders)
@@ -2055,4 +2058,16 @@ func BuildParamOverrideContext(info *RelayInfo) map[string]interface{} {
 
 	ctx["is_channel_test"] = info.IsChannelTest
 	return ctx
+}
+
+func paramOverrideRequestPath(info *RelayInfo) string {
+	if info == nil {
+		return ""
+	}
+	if info.ChannelType == constant.ChannelTypeOpenAICompletions &&
+		info.RelayMode != relayconstant.RelayModeResponses &&
+		info.RelayMode != relayconstant.RelayModeResponsesCompact {
+		return "/v1/completions"
+	}
+	return info.RequestURLPath
 }

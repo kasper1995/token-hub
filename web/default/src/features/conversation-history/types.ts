@@ -91,6 +91,7 @@ export interface ConversationSessionDetail {
 export interface GetConversationSessionsParams {
   p?: number
   page_size?: number
+  limit?: number
   start_timestamp?: number
   end_timestamp?: number
   username?: string
