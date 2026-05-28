@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/QuantumNous/new-api/common"
@@ -16,6 +17,7 @@ var rateLimitScript string
 type RedisLimiter struct {
 	client         *redis.Client
 	limitScriptSHA string
+	mu             sync.RWMutex
 }
 
 var (
@@ -39,6 +41,39 @@ func New(ctx context.Context, r *redis.Client) *RedisLimiter {
 	return instance
 }
 
+func (rl *RedisLimiter) scriptSHA() string {
+	rl.mu.RLock()
+	defer rl.mu.RUnlock()
+	return rl.limitScriptSHA
+}
+
+func (rl *RedisLimiter) reloadScript(ctx context.Context) error {
+	limitSHA, err := rl.client.ScriptLoad(ctx, rateLimitScript).Result()
+	if err != nil {
+		return err
+	}
+
+	rl.mu.Lock()
+	rl.limitScriptSHA = limitSHA
+	rl.mu.Unlock()
+	return nil
+}
+
+func isNoScriptError(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "NOSCRIPT")
+}
+
+func (rl *RedisLimiter) evalSha(ctx context.Context, key string, config *Config) (int, error) {
+	return rl.client.EvalSha(
+		ctx,
+		rl.scriptSHA(),
+		[]string{key},
+		config.Requested,
+		config.Rate,
+		config.Capacity,
+	).Int()
+}
+
 func (rl *RedisLimiter) Allow(ctx context.Context, key string, opts ...Option) (bool, error) {
 	// 默认配置
 	config := &Config{
@@ -53,14 +88,13 @@ func (rl *RedisLimiter) Allow(ctx context.Context, key string, opts ...Option) (
 	}
 
 	// 执行限流
-	result, err := rl.client.EvalSha(
-		ctx,
-		rl.limitScriptSHA,
-		[]string{key},
-		config.Requested,
-		config.Rate,
-		config.Capacity,
-	).Int()
+	result, err := rl.evalSha(ctx, key, config)
+	if isNoScriptError(err) {
+		if reloadErr := rl.reloadScript(ctx); reloadErr != nil {
+			return false, fmt.Errorf("reload rate limit script failed: %w", reloadErr)
+		}
+		result, err = rl.evalSha(ctx, key, config)
+	}
 
 	if err != nil {
 		return false, fmt.Errorf("rate limit failed: %w", err)
