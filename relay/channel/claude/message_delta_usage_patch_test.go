@@ -63,6 +63,29 @@ func TestShouldSkipClaudeMessageDeltaUsagePatch(t *testing.T) {
 	}))
 }
 
+func TestIsOpenAIStreamChunkLeak(t *testing.T) {
+	leakedChunk := `{"id":"chatcmpl-test","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"reasoning":"internal"}}]}`
+	leakedTextCompletion := `{"id":"cmpl-test","object":"text_completion","choices":[{"index":0,"text":"hello"}]}`
+	validClaude := `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"hello"}}`
+
+	assert.True(t, isOpenAIStreamChunkLeak(leakedChunk))
+	assert.True(t, isOpenAIStreamChunkLeak(leakedTextCompletion))
+	assert.False(t, isOpenAIStreamChunkLeak(validClaude))
+	assert.False(t, isOpenAIStreamChunkLeak(`{"object":"chat.completion.chunk"}`))
+}
+
+func TestSplitClaudeStreamData(t *testing.T) {
+	leakedChunk := `{"id":"chatcmpl-test","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"reasoning":"internal"}}]}`
+	leakedContent := `{"id":"chatcmpl-test","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"noise"}}]}`
+	validClaude := `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"hello"}}`
+
+	require.Equal(t, []string{validClaude}, splitClaudeStreamData(validClaude))
+	require.Empty(t, splitClaudeStreamData(leakedChunk))
+	require.Empty(t, splitClaudeStreamData(leakedChunk+"data: "+leakedContent+"event: content_block_start"))
+	require.Equal(t, []string{validClaude}, splitClaudeStreamData(leakedChunk+"data: "+validClaude))
+	require.Equal(t, []string{validClaude}, splitClaudeStreamData(leakedChunk+"data: "+validClaude+"event: content_block_delta"))
+}
+
 func TestBuildMessageDeltaPatchUsage(t *testing.T) {
 	t.Run("merge missing fields from claudeInfo", func(t *testing.T) {
 		claudeResponse := &dto.ClaudeResponse{Usage: &dto.ClaudeUsage{OutputTokens: 53}}

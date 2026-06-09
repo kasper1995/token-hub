@@ -22,6 +22,7 @@ func ClaudeToOpenAIRequest(claudeRequest dto.ClaudeRequest, info *relaycommon.Re
 	if claudeRequest.MaxTokens != nil {
 		openAIRequest.MaxTokens = lo.ToPtr(lo.FromPtr(claudeRequest.MaxTokens))
 	}
+	applyMinUpstreamMaxTokens(&openAIRequest, info)
 	if claudeRequest.TopP != nil {
 		openAIRequest.TopP = lo.ToPtr(lo.FromPtr(claudeRequest.TopP))
 	}
@@ -299,7 +300,7 @@ func StreamResponseOpenAI2Claude(openAIResponse *dto.ChatCompletionsStreamRespon
 	if info.SendResponseCount == 1 {
 		msg := &dto.ClaudeMediaMessage{
 			Id:    openAIResponse.Id,
-			Model: openAIResponse.Model,
+			Model: claudeResponseModel(openAIResponse.Model, info),
 			Type:  "message",
 			Role:  "assistant",
 			Usage: &dto.ClaudeUsage{
@@ -463,6 +464,7 @@ func StreamResponseOpenAI2Claude(openAIResponse *dto.ChatCompletionsStreamRespon
 	} else {
 		chosenChoice := openAIResponse.Choices[0]
 		doneChunk := chosenChoice.FinishReason != nil && *chosenChoice.FinishReason != ""
+		deferFinishUntilUsage := false
 		if doneChunk {
 			info.FinishReason = *chosenChoice.FinishReason
 			oaiUsage := openAIResponse.Usage
@@ -470,7 +472,10 @@ func StreamResponseOpenAI2Claude(openAIResponse *dto.ChatCompletionsStreamRespon
 				oaiUsage = info.ClaudeConvertInfo.Usage
 				// Some upstreams emit finish_reason first, then send a final usage-only chunk.
 				// Defer closing until usage is available so the final message_delta carries it.
-				return claudeResponses
+				if !streamChoiceHasDelta(chosenChoice) {
+					return claudeResponses
+				}
+				deferFinishUntilUsage = true
 			}
 		}
 
@@ -578,7 +583,7 @@ func StreamResponseOpenAI2Claude(openAIResponse *dto.ChatCompletionsStreamRespon
 			claudeResponses = append(claudeResponses, &claudeResponse)
 		}
 
-		if doneChunk || info.ClaudeConvertInfo.Done {
+		if (doneChunk && !deferFinishUntilUsage) || info.ClaudeConvertInfo.Done {
 			stopOpenBlocks()
 			oaiUsage := openAIResponse.Usage
 			if oaiUsage == nil {
@@ -611,7 +616,7 @@ func ResponseOpenAI2Claude(openAIResponse *dto.OpenAITextResponse, info *relayco
 		Id:    openAIResponse.Id,
 		Type:  "message",
 		Role:  "assistant",
-		Model: openAIResponse.Model,
+		Model: claudeResponseModel(openAIResponse.Model, info),
 	}
 	for _, choice := range openAIResponse.Choices {
 		stopReason = stopReasonOpenAI2Claude(choice.FinishReason)
@@ -641,6 +646,32 @@ func ResponseOpenAI2Claude(openAIResponse *dto.OpenAITextResponse, info *relayco
 	claudeResponse.Usage = buildClaudeUsageFromOpenAIUsage(&openAIResponse.Usage)
 
 	return claudeResponse
+}
+
+func applyMinUpstreamMaxTokens(request *dto.GeneralOpenAIRequest, info *relaycommon.RelayInfo) {
+	if request == nil || info == nil || info.ChannelMeta == nil {
+		return
+	}
+	minTokens := info.ChannelSetting.MinUpstreamMaxTokens
+	if minTokens == 0 {
+		return
+	}
+	if request.MaxTokens == nil || *request.MaxTokens < minTokens {
+		request.MaxTokens = common.GetPointer(minTokens)
+	}
+}
+
+func streamChoiceHasDelta(choice dto.ChatCompletionsStreamResponseChoice) bool {
+	return choice.Delta.GetContentString() != "" ||
+		choice.Delta.GetReasoningContent() != "" ||
+		len(choice.Delta.ToolCalls) > 0
+}
+
+func claudeResponseModel(openAIModel string, info *relaycommon.RelayInfo) string {
+	if info != nil && info.OriginModelName != "" {
+		return info.OriginModelName
+	}
+	return openAIModel
 }
 
 func stopReasonOpenAI2Claude(reason string) string {

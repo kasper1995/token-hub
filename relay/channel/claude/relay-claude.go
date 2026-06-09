@@ -695,6 +695,41 @@ func shouldSkipClaudeMessageDeltaUsagePatch(info *relaycommon.RelayInfo) bool {
 	return info.ChannelSetting.PassThroughBodyEnabled
 }
 
+func isOpenAIStreamChunkLeak(data string) bool {
+	if data == "" {
+		return false
+	}
+	object := gjson.Get(data, "object").String()
+	if object != "chat.completion.chunk" && object != "text_completion" {
+		return false
+	}
+	return gjson.Get(data, "choices").Exists()
+}
+
+func splitClaudeStreamData(data string) []string {
+	if !strings.Contains(data, `"object":"chat.completion.chunk"`) &&
+		!strings.Contains(data, `"object":"text_completion"`) {
+		return []string{data}
+	}
+
+	parts := strings.Split(data, "data:")
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		if eventIndex := strings.Index(part, "event:"); eventIndex >= 0 {
+			part = strings.TrimSpace(part[:eventIndex])
+		}
+		if part == "" || isOpenAIStreamChunkLeak(part) {
+			continue
+		}
+		result = append(result, part)
+	}
+	return result
+}
+
 func patchClaudeMessageDeltaUsageData(data string, usage *dto.ClaudeUsage) string {
 	if data == "" || usage == nil {
 		return data
@@ -802,6 +837,10 @@ func FormatClaudeResponseInfo(claudeResponse *dto.ClaudeResponse, oaiResponse *d
 }
 
 func HandleStreamResponseData(c *gin.Context, info *relaycommon.RelayInfo, claudeInfo *ClaudeResponseInfo, data string) *types.NewAPIError {
+	if isOpenAIStreamChunkLeak(data) {
+		return nil
+	}
+
 	var claudeResponse dto.ClaudeResponse
 	err := common.UnmarshalJsonStr(data, &claudeResponse)
 	if err != nil {
@@ -897,9 +936,12 @@ func ClaudeStreamHandler(c *gin.Context, resp *http.Response, info *relaycommon.
 	}
 	var err *types.NewAPIError
 	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
-		err = HandleStreamResponseData(c, info, claudeInfo, data)
-		if err != nil {
-			sr.Stop(err)
+		for _, item := range splitClaudeStreamData(data) {
+			err = HandleStreamResponseData(c, info, claudeInfo, item)
+			if err != nil {
+				sr.Stop(err)
+				return
+			}
 		}
 	})
 	if err != nil {
