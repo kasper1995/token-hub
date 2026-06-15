@@ -100,7 +100,38 @@ func TestGetConversationSessionsFiltersRecordsBeforeGrouping(t *testing.T) {
 	}
 }
 
-func TestGetConversationSessionsHydratesMissingDisplayFieldsFromBodies(t *testing.T) {
+func TestGetConversationSessionsContentFilterDoesNotSearchRawBodies(t *testing.T) {
+	resetConversationLogsForSessionTest(t)
+	insertConversationLogForSessionTest(t, &ConversationLog{
+		UserId:       1,
+		Username:     "alice",
+		SessionId:    "s1",
+		ModelName:    "gpt-4o",
+		UserText:     "visible summary",
+		RequestBody:  `{"messages":[{"role":"user","content":"raw-only-needle"}]}`,
+		ResponseBody: `raw-only-response`,
+		CreatedAt:    100,
+		Status:       ConversationLogStatusOK,
+	})
+
+	sessions, total, err := GetConversationSessions(ConversationSessionQuery{Content: "raw-only-needle"}, 0, 10)
+	if err != nil {
+		t.Fatalf("GetConversationSessions returned error: %v", err)
+	}
+	if total != 0 || len(sessions) != 0 {
+		t.Fatalf("content filter must not search raw bodies, got total=%d len=%d", total, len(sessions))
+	}
+
+	sessions, total, err = GetConversationSessions(ConversationSessionQuery{Content: "visible summary"}, 0, 10)
+	if err != nil {
+		t.Fatalf("GetConversationSessions returned error: %v", err)
+	}
+	if total != 1 || len(sessions) != 1 {
+		t.Fatalf("content filter should search lightweight summary fields, got total=%d len=%d", total, len(sessions))
+	}
+}
+
+func TestGetConversationSessionsDoesNotHydrateMissingDisplayFieldsFromBodies(t *testing.T) {
 	resetConversationLogsForSessionTest(t)
 	insertConversationLogForSessionTest(t, &ConversationLog{
 		UserId:       8,
@@ -118,17 +149,57 @@ func TestGetConversationSessionsHydratesMissingDisplayFieldsFromBodies(t *testin
 	if total != 1 || len(sessions) != 1 {
 		t.Fatalf("expected one session, got total=%d len=%d", total, len(sessions))
 	}
+	if sessions[0].SessionId != "" {
+		t.Fatalf("list must not hydrate session id from raw body, got %#v", sessions[0])
+	}
+	if sessions[0].LatestUserText != "" {
+		t.Fatalf("list must not hydrate user text from raw body, got %#v", sessions[0])
+	}
+	if sessions[0].LatestAssistantText != "" {
+		t.Fatalf("list must not hydrate assistant text from raw body, got %#v", sessions[0])
+	}
+	if len(sessions[0].Models) != 0 {
+		t.Fatalf("list must not hydrate model from raw body, got %#v", sessions[0].Models)
+	}
+}
+
+func TestBackfillConversationLogSummariesHydratesListFields(t *testing.T) {
+	resetConversationLogsForSessionTest(t)
+	insertConversationLogForSessionTest(t, &ConversationLog{
+		UserId:       8,
+		Username:     "dora",
+		RequestBody:  `{"model":"gpt-4o","messages":[{"role":"user","content":"旧数据能显示吗？"}],"metadata":{"conversationId":"legacy-session"}}`,
+		ResponseBody: `{"choices":[{"message":{"role":"assistant","content":"可以，读取时会补齐摘要。"}}]}`,
+		CreatedAt:    400,
+		Status:       ConversationLogStatusOK,
+	})
+
+	result, err := BackfillConversationLogSummaries(ConversationLogBackfillOptions{Limit: 10})
+	if err != nil {
+		t.Fatalf("BackfillConversationLogSummaries returned error: %v", err)
+	}
+	if result.Scanned != 1 || result.Updated != 1 || result.Skipped != 0 {
+		t.Fatalf("unexpected backfill result: %#v", result)
+	}
+
+	sessions, total, err := GetConversationSessions(ConversationSessionQuery{}, 0, 10)
+	if err != nil {
+		t.Fatalf("GetConversationSessions returned error: %v", err)
+	}
+	if total != 1 || len(sessions) != 1 {
+		t.Fatalf("expected one session, got total=%d len=%d", total, len(sessions))
+	}
 	if sessions[0].SessionId != "legacy-session" {
-		t.Fatalf("expected hydrated session id, got %#v", sessions[0])
+		t.Fatalf("expected backfilled session id, got %#v", sessions[0])
 	}
 	if sessions[0].LatestUserText != "旧数据能显示吗？" {
-		t.Fatalf("expected hydrated user text, got %#v", sessions[0])
+		t.Fatalf("expected backfilled user text, got %#v", sessions[0])
 	}
 	if sessions[0].LatestAssistantText != "可以，读取时会补齐摘要。" {
-		t.Fatalf("expected hydrated assistant text, got %#v", sessions[0])
+		t.Fatalf("expected backfilled assistant text, got %#v", sessions[0])
 	}
 	if len(sessions[0].Models) != 1 || sessions[0].Models[0] != "gpt-4o" {
-		t.Fatalf("expected hydrated model, got %#v", sessions[0].Models)
+		t.Fatalf("expected backfilled model, got %#v", sessions[0].Models)
 	}
 }
 

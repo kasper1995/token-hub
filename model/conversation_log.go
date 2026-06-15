@@ -19,6 +19,7 @@ import (
 )
 
 const ConversationLogStatusOK = "ok"
+const conversationLogBackfillBatchSize = 500
 const conversationLogSearchTextMaxBytes = 8 * 1024
 
 type conversationLogSearchFields struct {
@@ -106,6 +107,20 @@ type ConversationSessionDetail struct {
 	Summary   ConversationSessionSummary `json:"summary"`
 	Logs      []*ConversationLog         `json:"logs"`
 	Truncated bool                       `json:"truncated"`
+}
+
+type ConversationLogBackfillOptions struct {
+	AfterId        int
+	Limit          int
+	StartTimestamp int64
+	EndTimestamp   int64
+}
+
+type ConversationLogBackfillResult struct {
+	Scanned int
+	Updated int
+	Skipped int
+	LastId  int
 }
 
 func captureTextWithLimit(text string) (string, bool) {
@@ -512,6 +527,14 @@ func RecordConversationLog(c *gin.Context, relayInfo *relaycommon.RelayInfo, par
 }
 
 func conversationLogQuery(q ConversationLogQuery) *gorm.DB {
+	return conversationLogQueryWithContentScope(q, true)
+}
+
+func conversationLogLightQuery(q ConversationLogQuery) *gorm.DB {
+	return conversationLogQueryWithContentScope(q, false)
+}
+
+func conversationLogQueryWithContentScope(q ConversationLogQuery, includeRawBodyContent bool) *gorm.DB {
 	tx := LOG_DB.Model(&ConversationLog{})
 	if q.StartTimestamp != 0 {
 		tx = tx.Where("created_at >= ?", q.StartTimestamp)
@@ -549,7 +572,11 @@ func conversationLogQuery(q ConversationLogQuery) *gorm.DB {
 	}
 	if q.Content != "" {
 		like := "%" + q.Content + "%"
-		tx = tx.Where("(user_text LIKE ? OR assistant_text LIKE ? OR request_body LIKE ? OR response_body LIKE ?)", like, like, like, like)
+		if includeRawBodyContent {
+			tx = tx.Where("(user_text LIKE ? OR assistant_text LIKE ? OR request_body LIKE ? OR response_body LIKE ?)", like, like, like, like)
+		} else {
+			tx = tx.Where("(user_text LIKE ? OR assistant_text LIKE ?)", like, like)
+		}
 	}
 	return tx
 }
@@ -571,14 +598,11 @@ func GetConversationSessions(q ConversationSessionQuery, startIdx int, num int) 
 		num = 100
 	}
 	var logs []*ConversationLog
-	err = conversationLogQuery(q).
+	err = conversationLogLightQuery(q).
 		Select([]string{"id", "request_id", "user_id", "username", "token_id", "token_name", "channel_id", "channel_name", "model_name", "request_path", "session_id", "user_text", "assistant_text", "prompt_tokens", "completion_tokens", "is_stream", "status", "error_message", "group", "created_at", "exported_at", "final_request_relay_format", "original_request_relay_format"}).
 		Order("created_at desc, id desc").
 		Find(&logs).Error
 	if err != nil {
-		return nil, 0, err
-	}
-	if err = hydrateConversationLogDisplayFieldsFromBodies(logs); err != nil {
 		return nil, 0, err
 	}
 
@@ -771,6 +795,97 @@ func ExportConversationLogs(q ConversationLogQuery) (logs []*ConversationLog, er
 	}
 	err = conversationLogQuery(q).Order("id asc").Limit(limit).Find(&logs).Error
 	return logs, err
+}
+
+func BackfillConversationLogSummaries(options ConversationLogBackfillOptions) (ConversationLogBackfillResult, error) {
+	limit := options.Limit
+	if limit <= 0 {
+		limit = conversationLogBackfillBatchSize
+	}
+	result := ConversationLogBackfillResult{}
+	afterId := options.AfterId
+
+	for result.Scanned < limit {
+		batchLimit := conversationLogBackfillBatchSize
+		remaining := limit - result.Scanned
+		if remaining < batchLimit {
+			batchLimit = remaining
+		}
+		logs, err := loadConversationLogsForSummaryBackfill(options, afterId, batchLimit)
+		if err != nil {
+			return result, err
+		}
+		if len(logs) == 0 {
+			return result, nil
+		}
+
+		for _, log := range logs {
+			result.Scanned++
+			result.LastId = log.Id
+			afterId = log.Id
+			updates := conversationLogSummaryBackfillUpdates(log)
+			if len(updates) == 0 {
+				result.Skipped++
+				continue
+			}
+			if err := LOG_DB.Model(&ConversationLog{}).Where("id = ?", log.Id).Updates(updates).Error; err != nil {
+				return result, err
+			}
+			result.Updated++
+		}
+	}
+	return result, nil
+}
+
+func loadConversationLogsForSummaryBackfill(options ConversationLogBackfillOptions, afterId int, limit int) ([]*ConversationLog, error) {
+	tx := LOG_DB.Model(&ConversationLog{}).
+		Select("id, session_id, user_text, assistant_text, model_name, request_body, response_body, created_at").
+		Where("(session_id = ? OR user_text = ? OR assistant_text = ? OR model_name = ?)", "", "", "", "").
+		Where("id > ?", afterId)
+	if options.StartTimestamp != 0 {
+		tx = tx.Where("created_at >= ?", options.StartTimestamp)
+	}
+	if options.EndTimestamp != 0 {
+		tx = tx.Where("created_at <= ?", options.EndTimestamp)
+	}
+	var logs []*ConversationLog
+	err := tx.Order("id asc").Limit(limit).Find(&logs).Error
+	return logs, err
+}
+
+func conversationLogSummaryBackfillUpdates(log *ConversationLog) map[string]any {
+	updates := make(map[string]any)
+	var parsed *conversationRequestForClean
+	if log.SessionId == "" || log.UserText == "" || log.ModelName == "" {
+		var err error
+		parsed, err = parseConversationCleanRequest(log.RequestBody)
+		if err != nil {
+			parsed = nil
+		}
+	}
+	if log.SessionId == "" && parsed != nil {
+		if sessionId := extractSessionID(parsed.Metadata); sessionId != "" {
+			updates["session_id"] = sessionId
+		}
+	}
+	if log.UserText == "" && parsed != nil {
+		userText := truncateConversationLogSearchText(strings.TrimSpace(lastUserMessageTextWithPlaceholders(parsed.Messages)))
+		if userText == "" {
+			userText = truncateConversationLogSearchText(strings.TrimSpace(lastUserInputTextWithPlaceholders(parsed.Input)))
+		}
+		if userText != "" {
+			updates["user_text"] = userText
+		}
+	}
+	if log.AssistantText == "" {
+		if assistantText := conversationAssistantTextFromResponseBody(log.ResponseBody); assistantText != "" {
+			updates["assistant_text"] = assistantText
+		}
+	}
+	if log.ModelName == "" && parsed != nil && parsed.Model != "" {
+		updates["model_name"] = parsed.Model
+	}
+	return updates
 }
 
 func MarkConversationLogsExported(ids []int, exportedAt int64) error {

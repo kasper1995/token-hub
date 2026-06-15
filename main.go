@@ -51,6 +51,9 @@ func main() {
 	if len(os.Args) > 1 && os.Args[1] == "clean-conversation-logs" {
 		os.Exit(runCleanConversationLogsCommand(os.Args[2:]))
 	}
+	if len(os.Args) > 1 && os.Args[1] == "backfill-conversation-log-summaries" {
+		os.Exit(runBackfillConversationLogSummariesCommand(os.Args[2:]))
+	}
 
 	startTime := time.Now()
 
