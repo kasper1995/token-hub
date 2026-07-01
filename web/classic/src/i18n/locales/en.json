@@ -510,6 +510,7 @@
     "使用认证器应用（如 Google Authenticator、Microsoft Authenticator）扫描下方二维码：": "Use an authenticator app (such as Google Authenticator, Microsoft Authenticator) to scan the QR code below:",
     "使用认证器应用扫描二维码": "Scan QR code with authenticator app",
     "使用说明": "Guide",
+    "引导": "Guide",
     "例如": "e.g.",
     "例如 /var/cache/new-api": "e.g. /var/cache/new-api",
     "例如 €, £, Rp, ₩, ₹...": "For example, €, £, Rp, ₩, ₹...",

@@ -47,6 +47,7 @@ export default function SettingsHeaderNavModules(props) {
       requireAuth: false, // 默认不需要登录鉴权
     },
     docs: true,
+    guide: true,
     about: true,
   });
 
@@ -87,6 +88,7 @@ export default function SettingsHeaderNavModules(props) {
         requireAuth: false,
       },
       docs: true,
+      guide: true,
       about: true,
     };
     setHeaderNavModules(defaultModules);
@@ -142,7 +144,18 @@ export default function SettingsHeaderNavModules(props) {
           };
         }
 
-        setHeaderNavModules(modules);
+        setHeaderNavModules({
+          home: true,
+          console: true,
+          pricing: {
+            enabled: true,
+            requireAuth: false,
+          },
+          docs: true,
+          guide: true,
+          about: true,
+          ...modules,
+        });
       } catch (error) {
         // 使用默认配置
         const defaultModules = {
@@ -153,6 +166,7 @@ export default function SettingsHeaderNavModules(props) {
             requireAuth: false,
           },
           docs: true,
+          guide: true,
           about: true,
         };
         setHeaderNavModules(defaultModules);
@@ -182,6 +196,11 @@ export default function SettingsHeaderNavModules(props) {
       key: 'docs',
       title: t('文档'),
       description: t('系统文档和帮助信息'),
+    },
+    {
+      key: 'guide',
+      title: t('引导'),
+      description: t('token-hub 与 Claude Code 使用引导'),
     },
     {
       key: 'about',

@@ -27,11 +27,15 @@ export const useNavigation = (t, docsLink, headerNavModules) => {
       console: true,
       pricing: true,
       docs: true,
+      guide: true,
       about: true,
     };
 
-    // 使用传入的配置或默认配置
-    const modules = headerNavModules || defaultModules;
+    // 合并默认配置，避免旧配置缺少新增模块时被隐藏
+    const modules = {
+      ...defaultModules,
+      ...(headerNavModules || {}),
+    };
 
     const allLinks = [
       {
@@ -59,6 +63,11 @@ export const useNavigation = (t, docsLink, headerNavModules) => {
             },
           ]
         : []),
+      {
+        text: t('引导'),
+        itemKey: 'guide',
+        to: '/guide',
+      },
       {
         text: t('关于'),
         itemKey: 'about',

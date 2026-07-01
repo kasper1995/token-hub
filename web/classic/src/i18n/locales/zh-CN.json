@@ -488,6 +488,7 @@
     "使用认证器应用（如 Google Authenticator、Microsoft Authenticator）扫描下方二维码：": "使用认证器应用（如 Google Authenticator、Microsoft Authenticator）扫描下方二维码：",
     "使用认证器应用扫描二维码": "使用认证器应用扫描二维码",
     "使用说明": "使用说明",
+    "引导": "引导",
     "例如": "例如",
     "例如 /var/cache/new-api": "例如 /var/cache/new-api",
     "例如 €, £, Rp, ₩, ₹...": "例如 €, £, Rp, ₩, ₹...",

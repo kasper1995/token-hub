@@ -48,6 +48,7 @@ const headerNavSchema = z.object({
   rankingsEnabled: z.boolean(),
   rankingsRequireAuth: z.boolean(),
   docs: z.boolean(),
+  guide: z.boolean(),
   about: z.boolean(),
 })
 
@@ -83,6 +84,10 @@ const toFormValues = (config: HeaderNavModulesConfig): HeaderNavFormValues => ({
       : Boolean(config.rankings.requireAuth),
   docs:
     config.docs === undefined ? HEADER_NAV_DEFAULT.docs : Boolean(config.docs),
+  guide:
+    config.guide === undefined
+      ? HEADER_NAV_DEFAULT.guide
+      : Boolean(config.guide),
   about:
     config.about === undefined
       ? HEADER_NAV_DEFAULT.about
@@ -112,6 +117,7 @@ export function HeaderNavigationSection({
       home: values.home,
       console: values.console,
       docs: values.docs,
+      guide: values.guide,
       about: values.about,
       pricing: {
         ...(config.pricing ?? HEADER_NAV_DEFAULT.pricing),
@@ -159,6 +165,11 @@ export function HeaderNavigationSection({
       key: 'docs',
       title: t('Docs'),
       description: t('Documentation or external knowledge base.'),
+    },
+    {
+      key: 'guide',
+      title: t('Guide'),
+      description: t('New user onboarding guide for Claude Code.'),
     },
     {
       key: 'about',
