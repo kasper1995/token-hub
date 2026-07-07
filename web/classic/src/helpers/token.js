@@ -48,6 +48,20 @@ export async function fetchTokenKeysBatch(tokenIds) {
 }
 
 /**
+ * 获取 HAPI 初始化配置
+ * @param {number|string} tokenId
+ * @returns {Promise<object>}
+ */
+export async function fetchHapiSetupConfig(tokenId) {
+  const response = await API.post(`/api/token/${tokenId}/hapi/setup`);
+  const { success, data, message } = response.data || {};
+  if (!success || !data) {
+    throw new Error(message || 'Failed to fetch HAPI setup config');
+  }
+  return data;
+}
+
+/**
  * 获取可用的 token keys
  * @returns {Promise<string[]>} 返回 active 状态的不带 sk- 前缀的真实 token key 数组
  */

@@ -94,6 +94,19 @@ export interface ApiKeyFormData {
   cross_group_retry: boolean
 }
 
+export interface HapiSetupConfig {
+  api_url: string
+  namespace: string
+  cli_api_token: string
+  setup_token?: string
+  setup_command?: string
+  setup_shell_command?: string
+  setup_powershell_command?: string
+  install_script_url?: string
+  install_powershell_url?: string
+  guide_url?: string
+}
+
 // ============================================================================
 // Dialog Types
 // ============================================================================

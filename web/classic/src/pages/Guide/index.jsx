@@ -25,6 +25,7 @@ import { copy, showSuccess } from '../../helpers';
 const { Text, Title } = Typography;
 
 const baseUrl = 'http://182.92.166.143:3200';
+const hapiHubUrl = 'http://182.92.166.143:3006';
 const model = 'DSv4-flash';
 const assetBase = '/assets/guide';
 
@@ -75,6 +76,7 @@ const steps = [
   { id: 'cc-openai', label: 'cc-switch：OpenAI 协议' },
   { id: 'route', label: '开启本地代理/路由' },
   { id: 'verify', label: '启动验证' },
+  { id: 'hapi', label: '可选：HAPI 远程接管' },
 ];
 
 function CodeBlock({ value }) {
@@ -333,6 +335,66 @@ export default function Guide() {
             <Tip>
               新手推荐路径：先创建「海口_deepseek机房-映射cc」分组令牌，再使用第
               3 节的最小 <code>settings.json</code> 配置。
+            </Tip>
+          </Section>
+
+          <Section id='hapi' title='可选篇章：使用 HAPI 远程接管 Claude Code'>
+            <p>
+              HAPI 是远程接管通道，不替代前面的 Claude Code 模型配置。正常本地使用时，
+              仍然按第 3 节的 <code>settings.json</code> 或第 4-6 节的 cc-switch
+              方式完成配置；需要远程接管时，再用 <code>hapi</code> 唤起本机
+              Claude Code 并连接到 HAPI Hub。
+            </p>
+            <p>
+              在令牌列表右侧点击「HAPI」下拉菜单。这里有两个需要用到的内容：
+            </p>
+            <ul className='list-disc space-y-2 pl-5'>
+              <li>
+                「复制 HAPI 初始化脚本」用于配置本机 HAPI 连接信息，macOS/Linux
+                和 Windows 按自己的系统选择。
+              </li>
+              <li>
+                「复制 HAPI 令牌」用于登录 HAPI Web 页面，远程接管时需要粘贴这个令牌。
+              </li>
+            </ul>
+            <GuideImage
+              src='hapi-token-menu.png'
+              alt='令牌列表中的 HAPI 操作菜单'
+              className='max-w-sm'
+            />
+            <p>
+              把复制出的命令粘贴到本机终端执行一次。脚本会请求 token-hub
+              获取当前令牌对应的 HAPI 连接信息，并写入本机{' '}
+              <code>~/.hapi/settings.json</code>。
+            </p>
+            <GuideImage
+              src='hapi-setup-command.png'
+              alt='执行 HAPI 初始化脚本'
+            />
+            <CodeBlock value='hapi' />
+            <p>
+              初始化成功后，在项目目录运行 <code>hapi</code>。它会启动本机 Claude
+              Code 并把当前机器接入 HAPI Hub；以后重启电脑或重新接入时，只要继续使用
+              同一个 token-hub 令牌生成的 HAPI 配置，就会回到同一个 HAPI namespace。
+            </p>
+            <Tip>
+              默认脚本写入 <code>~/.hapi/settings.json</code>。如果你手动指定过{' '}
+              <code>HAPI_HOME</code>，后续每次运行 <code>hapi</code> 都要使用同一个{' '}
+              <code>HAPI_HOME</code>，否则会读到另一套本地配置。
+            </Tip>
+            <p>
+              Web 端登录时，打开 <code>{hapiHubUrl}/sessions</code>。回到令牌列表的
+              「HAPI」下拉菜单，点击「复制 HAPI 令牌」，把复制出的令牌粘贴到登录页。
+            </p>
+            <GuideImage src='hapi-login.png' alt='HAPI Web 登录页' />
+            <p>
+              登录后选择本机机器和会话，即可在浏览器里继续远程操作 Claude Code。
+              本机通过 <code>hapi</code> 启动后，页面会显示对应的 session。
+            </p>
+            <GuideImage src='hapi-session.png' alt='HAPI 远程会话页面' />
+            <Tip>
+              HAPI namespace 用于把不同 token-hub 令牌的机器和会话分开，方便恢复原来的工作状态。
+              它不是高强度安全边界，不要把 HAPI 令牌或初始化脚本公开发送给无关人员。
             </Tip>
           </Section>
         </main>

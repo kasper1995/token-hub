@@ -24,6 +24,7 @@ import type {
   GetApiKeysResponse,
   SearchApiKeysParams,
   ApiKeyFormData,
+  HapiSetupConfig,
 } from './types'
 
 // ============================================================================
@@ -113,5 +114,12 @@ export async function fetchTokenKeysBatch(ids: number[]): Promise<{
   data?: { keys: Record<number, string> }
 }> {
   const res = await api.post('/api/token/batch/keys', { ids })
+  return res.data
+}
+
+export async function fetchHapiSetupConfig(
+  id: number
+): Promise<ApiResponse<HapiSetupConfig>> {
+  const res = await api.post(`/api/token/${id}/hapi/setup`)
   return res.data
 }

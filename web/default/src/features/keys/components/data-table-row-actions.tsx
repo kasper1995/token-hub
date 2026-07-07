@@ -28,6 +28,8 @@ import {
   Copy,
   Link,
   Loader2,
+  ServerCog,
+  Terminal,
   MoreHorizontal as DotsHorizontalIcon,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -53,7 +55,7 @@ import {
 import { useChatPresets } from '@/features/chat/hooks/use-chat-presets'
 import { resolveChatUrl, type ChatPreset } from '@/features/chat/lib/chat-links'
 import { sendToFluent } from '@/features/chat/lib/send-to-fluent'
-import { updateApiKeyStatus } from '../api'
+import { fetchHapiSetupConfig, updateApiKeyStatus } from '../api'
 import { API_KEY_STATUS, ERROR_MESSAGES, SUCCESS_MESSAGES } from '../constants'
 import { apiKeySchema } from '../types'
 import { useApiKeys } from './api-keys-provider'
@@ -100,6 +102,18 @@ export function DataTableRowActions<TData>({
   const [isTogglingStatus, setIsTogglingStatus] = useState(false)
 
   const hasChatPresets = chatPresets.length > 0
+
+  const fetchHapiConfig = useCallback(async () => {
+    try {
+      const result = await fetchHapiSetupConfig(apiKey.id)
+      if (result.success && result.data) return result.data
+      toast.error(result.message || t(ERROR_MESSAGES.UNEXPECTED))
+      return null
+    } catch {
+      toast.error(t(ERROR_MESSAGES.UNEXPECTED))
+      return null
+    }
+  }, [apiKey.id, t])
 
   const handleOpenChatPreset = useCallback(
     async (preset: ChatPreset) => {
@@ -244,6 +258,66 @@ export function DataTableRowActions<TData>({
               <Link size={16} />
             </DropdownMenuShortcut>
           </DropdownMenuItem>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>{t('HAPI')}</DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              <DropdownMenuItem
+                onClick={async () => {
+                  const config = await fetchHapiConfig()
+                  if (!config) return
+                  const ok = await copyToClipboard(config.cli_api_token)
+                  if (ok) toast.success(t('Copied'))
+                }}
+              >
+                {t('Copy HAPI Token')}
+                <DropdownMenuShortcut>
+                  <ServerCog size={16} />
+                </DropdownMenuShortcut>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={async () => {
+                  const config = await fetchHapiConfig()
+                  const command =
+                    config?.setup_shell_command || config?.setup_command
+                  if (!command) return
+                  const ok = await copyToClipboard(command)
+                  if (ok) toast.success(t('Copied'))
+                }}
+              >
+                {t('Copy HAPI Setup Script (macOS/Linux)')}
+                <DropdownMenuShortcut>
+                  <Terminal size={16} />
+                </DropdownMenuShortcut>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={async () => {
+                  const config = await fetchHapiConfig()
+                  if (!config?.setup_powershell_command) return
+                  const ok = await copyToClipboard(
+                    config.setup_powershell_command
+                  )
+                  if (ok) toast.success(t('Copied'))
+                }}
+              >
+                {t('Copy HAPI Setup Script (Windows)')}
+                <DropdownMenuShortcut>
+                  <Terminal size={16} />
+                </DropdownMenuShortcut>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={async () => {
+                  const config = await fetchHapiConfig()
+                  const guideUrl = config?.guide_url || '/guide#hapi'
+                  window.open(guideUrl, '_blank', 'noopener')
+                }}
+              >
+                {t('HAPI Guide')}
+                <DropdownMenuShortcut>
+                  <ExternalLink size={16} />
+                </DropdownMenuShortcut>
+              </DropdownMenuItem>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
           <DropdownMenuSeparator />
           <DropdownMenuItem
             onClick={() => {

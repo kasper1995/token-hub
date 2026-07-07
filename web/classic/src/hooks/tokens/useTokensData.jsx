@@ -32,6 +32,7 @@ import { useTableCompactMode } from '../common/useTableCompactMode';
 import {
   fetchTokenKey as fetchTokenKeyById,
   fetchTokenKeysBatch,
+  fetchHapiSetupConfig,
   getServerAddress,
   encodeChannelConnectionString,
 } from '../../helpers/token';
@@ -209,6 +210,38 @@ export const useTokensData = (openFluentNotification, openCCSwitchModal) => {
     const serverUrl = getServerAddress();
     const connStr = encodeChannelConnectionString(`sk-${fullKey}`, serverUrl);
     await copyText(connStr);
+  };
+
+  const getHapiSetupConfig = async (record) => {
+    try {
+      return await fetchHapiSetupConfig(record.id);
+    } catch (error) {
+      showError(error?.message || t('获取 HAPI 配置失败'));
+      return null;
+    }
+  };
+
+  const copyHapiToken = async (record) => {
+    const config = await getHapiSetupConfig(record);
+    if (config?.cli_api_token) {
+      await copyText(config.cli_api_token);
+    }
+  };
+
+  const copyHapiSetupScript = async (record, platform) => {
+    const config = await getHapiSetupConfig(record);
+    const command =
+      platform === 'windows'
+        ? config?.setup_powershell_command
+        : config?.setup_shell_command || config?.setup_command;
+    if (command) {
+      await copyText(command);
+    }
+  };
+
+  const openHapiGuide = async (record) => {
+    const config = await getHapiSetupConfig(record);
+    window.open(config?.guide_url || '/guide#hapi', '_blank');
   };
 
   // Open link function for chat integrations
@@ -504,6 +537,9 @@ export const useTokensData = (openFluentNotification, openCCSwitchModal) => {
     toggleTokenVisibility,
     copyTokenKey,
     copyTokenConnectionString,
+    copyHapiToken,
+    copyHapiSetupScript,
+    openHapiGuide,
     onOpenLink,
     manageToken,
     searchTokens,

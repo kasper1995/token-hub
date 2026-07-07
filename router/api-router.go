@@ -30,6 +30,9 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.GET("/about", controller.GetAbout)
 		//apiRouter.GET("/midjourney", controller.GetMidjourney)
 		apiRouter.GET("/home_page_content", controller.GetHomePageContent)
+		apiRouter.GET("/hapi/install.sh", controller.GetHapiInstallScript)
+		apiRouter.GET("/hapi/install.ps1", controller.GetHapiInstallPowerShell)
+		apiRouter.GET("/hapi/setup-config", middleware.CriticalRateLimit(), controller.GetHapiSetupConfig)
 		apiRouter.GET("/pricing", middleware.TryUserAuth(), controller.GetPricing)
 		perfMetricsRoute := apiRouter.Group("/perf-metrics")
 		perfMetricsRoute.Use(middleware.TryUserAuth())
@@ -262,6 +265,7 @@ func SetApiRouter(router *gin.Engine) {
 		{
 			tokenRoute.GET("/", controller.GetAllTokens)
 			tokenRoute.GET("/search", middleware.SearchRateLimit(), controller.SearchTokens)
+			tokenRoute.POST("/:id/hapi/setup", middleware.CriticalRateLimit(), middleware.DisableCache(), controller.GetTokenHapiSetup)
 			tokenRoute.GET("/:id", controller.GetToken)
 			tokenRoute.POST("/:id/key", middleware.CriticalRateLimit(), middleware.DisableCache(), controller.GetTokenKey)
 			tokenRoute.POST("/", controller.AddToken)

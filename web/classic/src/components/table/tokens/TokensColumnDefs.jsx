@@ -357,6 +357,9 @@ const renderOperations = (
   setShowEdit,
   manageToken,
   refresh,
+  copyHapiToken,
+  copyHapiSetupScript,
+  openHapiGuide,
   t,
 ) => {
   let chatsArray = [];
@@ -380,6 +383,29 @@ const renderOperations = (
   } catch (_) {
     showError(t('聊天链接配置错误，请联系管理员'));
   }
+
+  const hapiMenu = [
+    {
+      node: 'item',
+      name: t('复制 HAPI 令牌'),
+      onClick: () => copyHapiToken(record),
+    },
+    {
+      node: 'item',
+      name: t('复制 HAPI 初始化脚本（macOS/Linux）'),
+      onClick: () => copyHapiSetupScript(record, 'shell'),
+    },
+    {
+      node: 'item',
+      name: t('复制 HAPI 初始化脚本（Windows）'),
+      onClick: () => copyHapiSetupScript(record, 'windows'),
+    },
+    {
+      node: 'item',
+      name: t('HAPI 引导'),
+      onClick: () => openHapiGuide(record),
+    },
+  ];
 
   return (
     <Space wrap>
@@ -409,6 +435,12 @@ const renderOperations = (
           ></Button>
         </Dropdown>
       </SplitButtonGroup>
+
+      <Dropdown trigger='click' position='bottomRight' menu={hapiMenu}>
+        <Button type='tertiary' size='small'>
+          HAPI
+        </Button>
+      </Dropdown>
 
       {record.status === 1 ? (
         <Button
@@ -480,6 +512,9 @@ export const getTokensColumns = ({
   setShowEdit,
   refresh,
   groupRatios = {},
+  copyHapiToken,
+  copyHapiSetupScript,
+  openHapiGuide,
 }) => {
   return [
     {
@@ -567,6 +602,9 @@ export const getTokensColumns = ({
           setShowEdit,
           manageToken,
           refresh,
+          copyHapiToken,
+          copyHapiSetupScript,
+          openHapiGuide,
           t,
         ),
     },
