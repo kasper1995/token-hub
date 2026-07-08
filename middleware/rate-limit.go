@@ -108,6 +108,13 @@ func CriticalRateLimit() func(c *gin.Context) {
 	return defNext
 }
 
+func TeamDeskIntegrationRateLimit() func(c *gin.Context) {
+	if common.TeamDeskIntegrationRateLimitEnable {
+		return rateLimitFactory(common.TeamDeskIntegrationRateLimitNum, common.TeamDeskIntegrationRateLimitDuration, "TD")
+	}
+	return defNext
+}
+
 func DownloadRateLimit() func(c *gin.Context) {
 	return rateLimitFactory(common.DownloadRateLimitNum, common.DownloadRateLimitDuration, "DW")
 }
