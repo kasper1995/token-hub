@@ -33,6 +33,8 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.GET("/hapi/install.sh", controller.GetHapiInstallScript)
 		apiRouter.GET("/hapi/install.ps1", controller.GetHapiInstallPowerShell)
 		apiRouter.GET("/hapi/setup-config", middleware.CriticalRateLimit(), controller.GetHapiSetupConfig)
+		apiRouter.GET("/integrations/team-desk/gitlab/me", middleware.CriticalRateLimit(), controller.GetTeamDeskGitLabMe)
+		apiRouter.POST("/integrations/team-desk/gitlab/setup-config", middleware.CriticalRateLimit(), middleware.DisableCache(), controller.GetTeamDeskGitLabSetupConfig)
 		apiRouter.GET("/pricing", middleware.TryUserAuth(), controller.GetPricing)
 		perfMetricsRoute := apiRouter.Group("/perf-metrics")
 		perfMetricsRoute.Use(middleware.TryUserAuth())

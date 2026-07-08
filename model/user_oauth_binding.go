@@ -10,9 +10,9 @@ import (
 // UserOAuthBinding stores the binding relationship between users and custom OAuth providers
 type UserOAuthBinding struct {
 	Id             int       `json:"id" gorm:"primaryKey"`
-	UserId         int       `json:"user_id" gorm:"not null;uniqueIndex:ux_user_provider"`                                        // User ID - one binding per user per provider
-	ProviderId     int       `json:"provider_id" gorm:"not null;uniqueIndex:ux_user_provider;uniqueIndex:ux_provider_userid"`     // Custom OAuth provider ID
-	ProviderUserId string    `json:"provider_user_id" gorm:"type:varchar(256);not null;uniqueIndex:ux_provider_userid"`           // User ID from OAuth provider - one OAuth account per provider
+	UserId         int       `json:"user_id" gorm:"not null;uniqueIndex:ux_user_provider"`                                    // User ID - one binding per user per provider
+	ProviderId     int       `json:"provider_id" gorm:"not null;uniqueIndex:ux_user_provider;uniqueIndex:ux_provider_userid"` // Custom OAuth provider ID
+	ProviderUserId string    `json:"provider_user_id" gorm:"type:varchar(256);not null;uniqueIndex:ux_provider_userid"`       // User ID from OAuth provider - one OAuth account per provider
 	CreatedAt      time.Time `json:"created_at"`
 }
 
@@ -51,6 +51,16 @@ func GetUserByOAuthBinding(providerId int, providerUserId string) (*User, error)
 		return nil, err
 	}
 	return &user, nil
+}
+
+// GetOAuthBindingByProviderUserId 按 provider 用户 ID 查找绑定关系。
+func GetOAuthBindingByProviderUserId(providerId int, providerUserId string) (*UserOAuthBinding, error) {
+	var binding UserOAuthBinding
+	err := DB.Where("provider_id = ? AND provider_user_id = ?", providerId, providerUserId).First(&binding).Error
+	if err != nil {
+		return nil, err
+	}
+	return &binding, nil
 }
 
 // IsProviderUserIdTaken checks if a provider user ID is already bound to any user
